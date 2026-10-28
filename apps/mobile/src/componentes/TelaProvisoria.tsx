@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -7,7 +8,7 @@ import { fonte, useTema } from "@/tema";
  * Esqueleto de tela. As telas completas entram depois do teste com as famílias;
  * até lá cada aba mostra o título e o que ela vai fazer.
  */
-export function TelaProvisoria({ titulo, descricao }: { titulo: string; descricao: string }) {
+export function TelaProvisoria({ titulo, descricao, children }: { titulo: string; descricao: string; children?: ReactNode }) {
   const { cor, medida } = useTema();
   const margem = useSafeAreaInsets();
   return (
@@ -24,6 +25,7 @@ export function TelaProvisoria({ titulo, descricao }: { titulo: string; descrica
         <Text style={[fonte("rotulo"), { color: cor.textoSuave }]}>Em construção</Text>
         <Text style={[fonte("corpoPadrao"), { color: cor.textoPrincipal }]}>{descricao}</Text>
       </View>
+      {children}
     </View>
   );
 }

@@ -1,1 +1,1 @@
-"""API HTTP do Quanto Fica."""
+"""API HTTP do SC Mercados."""

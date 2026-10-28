@@ -1,0 +1,42 @@
+# API e coleta do SC Mercados na Fly.io, região São Paulo (dados no Brasil: LGPD art. 33).
+# Segredo obrigatório:  fly secrets set DATABASE_URL="postgresql://...supabase..."
+app = "sc-mercados-api"
+primary_region = "gru"
+
+[build]
+  dockerfile = "backend/Dockerfile"
+
+[deploy]
+  # Antes de cada versão nova entrar no ar: migrações pendentes + dados iniciais (idempotentes).
+  release_command = "python -m quantofica.banco.migrar --dados"
+  strategy = "rolling"
+
+[processes]
+  app = "uvicorn quantofica.api.app:create_app --factory --host 0.0.0.0 --port 8080 --proxy-headers --forwarded-allow-ips *"
+  coletor = "python -m quantofica.coleta.relogio"
+
+[http_service]
+  processes = ["app"]
+  internal_port = 8080
+  force_https = true
+  # Uma máquina sempre de pé: o limite de tentativas por IP fica em memória (ver api/limite.py).
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 50
+    hard_limit = 100
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/v1/saude"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "20s"
+
+[[vm]]
+  processes = ["app", "coletor"]
+  size = "shared-cpu-1x"
+  memory = "512mb"

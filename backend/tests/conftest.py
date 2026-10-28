@@ -1,7 +1,7 @@
 """Banco de teste para os testes de integração.
 
 Cada módulo de teste recebe o banco `quantofica_teste` recriado do zero no Postgres local
-(db/docker-compose.yml) ou no do CI, com as migrações aplicadas em ordem. Sem Postgres disponível,
+(db/docker-compose.yml) ou no do CI, com as migrações aplicadas pelo mesmo executor da produção. Sem Postgres disponível,
 os testes que pedem o banco são pulados.
 """
 
@@ -11,7 +11,9 @@ from pathlib import Path
 import psycopg
 import pytest
 
-MIGRACOES = Path(__file__).resolve().parents[2] / "db" / "migrations"
+from quantofica.banco.migrar import migrar
+
+PASTA_DB = Path(__file__).resolve().parents[2] / "db"
 ADMIN = os.environ.get("TEST_ADMIN_DATABASE_URL", "postgresql://quantofica:local-apenas@localhost:54329/postgres")
 NOME = "quantofica_teste"
 
@@ -26,7 +28,5 @@ def banco_url() -> str:
         admin.execute(f"drop database if exists {NOME} with (force)")
         admin.execute(f"create database {NOME}")
     url = psycopg.conninfo.make_conninfo(ADMIN, dbname=NOME)
-    with psycopg.connect(url, autocommit=True) as conn:
-        for arquivo in sorted(MIGRACOES.glob("*.sql")):
-            conn.execute(arquivo.read_text(encoding="utf-8"))
+    migrar(url, PASTA_DB)
     return url

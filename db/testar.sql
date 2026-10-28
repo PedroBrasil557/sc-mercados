@@ -2,12 +2,12 @@
 \set ON_ERROR_STOP on
 begin;
 
-insert into cidade (id, nome, uf) values ('00000000-0000-0000-0000-000000000001', 'Blumenau', 'SC');
-insert into rede (id, nome, tem_api) values ('00000000-0000-0000-0000-000000000002', 'Giassi', true);
+insert into cidade (id, nome, uf) values ('00000000-0000-0000-0000-000000000001', 'Cidade de teste', 'SC');
+insert into rede (id, nome, tem_api) values ('00000000-0000-0000-0000-000000000002', 'Rede de teste', true);
 insert into loja (id, rede_id, cidade_id, nome) values ('00000000-0000-0000-0000-000000000003', '00000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000001', 'Giassi Victor Konder');
-insert into categoria (id, nome, unidade_medida) values ('cafe', 'Café e chás', 'g');
-insert into produto (id, categoria_id, nome_humano, marca, tamanho, unidade) values ('00000000-0000-0000-0000-000000000004', 'cafe', 'Café extraforte', 'Pilão', 500, 'g');
-insert into ean (codigo, produto_id) values ('07896089013405', '00000000-0000-0000-0000-000000000004');
+insert into categoria (id, nome, unidade_medida) values ('teste', 'Categoria de teste', 'g');
+insert into produto (id, categoria_id, nome_humano, marca, tamanho, unidade) values ('00000000-0000-0000-0000-000000000004', 'teste', 'Produto de teste', 'Marca', 500, 'g');
+insert into ean (codigo, produto_id) values ('07890000000017', '00000000-0000-0000-0000-000000000004');
 insert into observacao_preco (id, produto_id, loja_id, preco_centavos, preco_de_centavos, fonte, observado_em)
   values ('00000000-0000-0000-0000-000000000005', '00000000-0000-0000-0000-000000000004', '00000000-0000-0000-0000-000000000003', 2298, 2998, 'site', now());
 select 'insercao: ok';
@@ -88,5 +88,17 @@ do $$ begin
   end if;
 end $$;
 select 'exclusao do titular desliga a autoria: ok';
+
+-- 9. toda tabela com RLS ligado: no Supabase, tabela sem RLS fica aberta na API REST com a chave pública
+do $$
+declare sem_rls text;
+begin
+  select string_agg(tablename, ', ') into sem_rls from pg_tables
+   where schemaname = 'public' and not rowsecurity and tablename <> 'migracao_aplicada';
+  if sem_rls is not null then
+    raise exception 'FALHOU: tabelas sem RLS: % (crie a política na mesma migração)', sem_rls;
+  end if;
+end $$;
+select 'todas as tabelas com rls: ok';
 
 rollback;

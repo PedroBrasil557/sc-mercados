@@ -1,5 +1,5 @@
 /**
- * Cliente da API do Quanto Fica.
+ * Cliente da API do SC Mercados.
  *
  * O token do aparelho fica no armazenamento seguro do sistema (Keystore no Android), nunca em texto puro.
  * Endereço da API: variável EXPO_PUBLIC_API_URL (ex.: http://10.0.2.2:8000 no emulador Android).

@@ -1,4 +1,6 @@
-# Quanto Fica
+# SC Mercados
+
+> Nome do projeto no código: `quantofica` (nome provisório anterior). O nome que aparece para as pessoas é **SC Mercados**.
 
 A lista de compras da casa que sabe quanto as coisas custam em cada mercado de Blumenau.
 
@@ -69,13 +71,34 @@ A conta opcional (e-mail/Google, R16) entra depois; até lá o token do aparelho
 
 ## Coleta agendada
 
-`.github/workflows/coleta.yml` roda todo dia às 5h e na quinta à tarde. Fica desligada até existir o banco de
-produção (variável `COLETA_ATIVA=true` e segredo `DATABASE_URL`). A cada rodada:
+O processo `coletor` (ver `fly.toml`) roda `python -m quantofica.coleta.relogio`: coleta todo dia às 5h e na quinta às
+15h (Brasília), quando os encartes entram nos sites. A cada rodada:
 
 - só o preço simulado na loja física vira observação (o de catálogo é regional);
 - embalagem múltipla, loja não cadastrada e preço mais de 50% longe da mediana vão para a fila de revisão;
 - o monitor de qualidade confere se alguma rede está sem coleta há mais de 26 h, se a cobertura caiu mais de 10%
   e se o mesmo EAN aparece com tamanhos diferentes entre redes.
+
+## Publicar (Supabase + Fly.io, região São Paulo)
+
+Uma vez, por quem é dono das contas:
+
+1. **Supabase** (supabase.com, entrar com o GitHub): *New project* → região **South America (São Paulo)** → guarde a senha
+   do banco. Em *Connect* → *Session pooler*, copie a URL `postgresql://postgres.<ref>:<senha>@aws-0-sa-east-1.pooler.supabase.com:5432/postgres`.
+2. **Fly.io** (fly.io, cadastro com cartão; duas máquinas pequenas sempre ligadas, API e coletor, dão cerca de US$ 7 por mês):
+   instale o `flyctl` (`iwr https://fly.io/install.ps1 -useb | iex` no PowerShell) e rode `fly auth login`.
+3. Na raiz do repositório:
+
+```bash
+fly apps create sc-mercados-api
+fly secrets set DATABASE_URL="<URL do passo 1>"
+fly deploy            # roda as migrações e os dados iniciais antes de subir a API e o coletor
+fly status            # máquinas app e coletor rodando
+curl https://sc-mercados-api.fly.dev/v1/saude
+```
+
+Cada `fly deploy` seguinte aplica só as migrações novas (`migracao_aplicada`). Todas as tabelas têm RLS ligado sem
+política: a API REST do Supabase, aberta com a chave pública, não lê nem grava nada (`db/testar.sql` confere).
 
 ## Dados de terceiros
 
