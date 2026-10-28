@@ -2,13 +2,14 @@
  * Cliente da API do SC Mercados.
  *
  * O token do aparelho fica no armazenamento seguro do sistema (Keystore no Android), nunca em texto puro.
- * Endereço da API: variável EXPO_PUBLIC_API_URL (ex.: http://10.0.2.2:8000 no emulador Android).
+ * Endereço da API: a do ar (Render) por padrão; para a API local, EXPO_PUBLIC_API_URL=http://<ip-do-pc>:8080.
  */
 import * as SecureStore from "expo-secure-store";
 
 const CHAVE_TOKEN = "quantofica.token";
-const API = process.env.EXPO_PUBLIC_API_URL ?? "http://10.0.2.2:8000";
-const TEMPO_LIMITE_MS = 15_000;
+const API = process.env.EXPO_PUBLIC_API_URL ?? "https://sc-mercados-api.onrender.com";
+// O Render gratuito dorme sem uso e leva de 30 a 60 s para acordar na primeira chamada.
+const TEMPO_LIMITE_MS = 75_000;
 
 export class ErroDaApi extends Error {
   constructor(
