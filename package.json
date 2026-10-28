@@ -1,0 +1,14 @@
+{
+  "name": "quanto-fica",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "mobile": "npm run start --workspace apps/mobile"
+  },
+  "overrides": {
+    "react": "19.3.0"
+  }
+}
