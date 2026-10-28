@@ -6,6 +6,8 @@
  */
 import * as SecureStore from "expo-secure-store";
 
+import type { OperacaoDaLista } from "@/lista/regras";
+
 const CHAVE_TOKEN = "quantofica.token";
 const API = process.env.EXPO_PUBLIC_API_URL ?? "https://sc-mercados-api.onrender.com";
 // O Render gratuito dorme sem uso e leva de 30 a 60 s para acordar na primeira chamada.
@@ -59,15 +61,14 @@ export type Eu = {
   casa: { id: string; bairro_id: string | null; membros: { id: string; apelido: string; papel: string }[] };
   listas: { id: string; nome: string }[];
 };
-export type TipoOperacao = "criar" | "somar" | "tirar" | "marcar" | "desmarcar" | "remover";
-export type Operacao = {
+export type Operacao = OperacaoDaLista & { produto_id?: string | null; categoria_id?: string | null };
+export type Produto = {
   id: string;
-  item_id: string;
-  tipo: TipoOperacao;
-  feita_em: string; // ISO 8601 com fuso
-  valor?: number;
-  produto_id?: string;
-  categoria_id?: string;
+  nome: string;
+  marca: string | null;
+  tamanho: string | null;
+  unidade: string | null;
+  categoria: string;
 };
 export type ItemDaLista = {
   id: string;
@@ -120,6 +121,7 @@ export const api = {
     return r;
   },
 
+  produtos: (busca = "") => pedir<Produto[]>("GET", `/v1/produtos?busca=${encodeURIComponent(busca)}&limite=200`),
   convidar: () => pedir<{ codigo: string; expira_em: string; usos_restantes: number }>("POST", "/v1/casa/convites"),
   eu: () => pedir<Eu>("GET", "/v1/eu"),
 
