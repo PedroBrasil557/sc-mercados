@@ -16,9 +16,18 @@ from pathlib import Path
 
 import psycopg
 
-# No container, db/ fica ao lado do pacote; no repositório, dois níveis acima de backend/.
-_CANDIDATAS = [Path("/app/db"), Path(__file__).resolve().parents[4] / "db"]
-PASTA_DB = next((p for p in _CANDIDATAS if p.is_dir()), _CANDIDATAS[-1])
+
+def achar_pasta_db() -> Path:
+    """Onde estão db/migrations: no container (/app/db), rodando da raiz ou de backend/, ou no checkout do pacote.
+
+    Instalado com `pip install .` (GitHub Actions), o __file__ fica em site-packages, longe do repositório:
+    por isso a pasta de trabalho vem antes.
+    """
+    candidatas = [Path("/app/db"), Path.cwd() / "db", Path.cwd().parent / "db", Path(__file__).resolve().parents[4] / "db"]
+    for pasta in candidatas:
+        if (pasta / "migrations").is_dir():
+            return pasta
+    raise FileNotFoundError("não achei db/migrations; informe com --pasta")
 
 
 def pendentes(conn: psycopg.Connection, pasta: Path) -> list[Path]:
@@ -29,7 +38,11 @@ def pendentes(conn: psycopg.Connection, pasta: Path) -> list[Path]:
     return [f for f in sorted(pasta.glob("*.sql")) if f.name not in feitas]
 
 
-def migrar(dsn: str, pasta_db: Path = PASTA_DB, dados: bool = False, marcar_ate: str | None = None) -> list[str]:
+def migrar(dsn: str, pasta_db: Path | None = None, dados: bool = False, marcar_ate: str | None = None) -> list[str]:
+    pasta_db = pasta_db or achar_pasta_db()
+    if not any((pasta_db / "migrations").glob("*.sql")):
+        # Pasta errada não pode passar como "nada pendente": foi assim que a 1ª publicação não criou nenhuma tabela.
+        raise FileNotFoundError(f"nenhuma migração em {pasta_db / 'migrations'}")
     aplicadas = []
     with psycopg.connect(dsn, autocommit=True, prepare_threshold=None) as conn:
         # Duas publicações ao mesmo tempo não podem migrar juntas.
@@ -53,9 +66,13 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Aplica as migrações pendentes do banco")
     p.add_argument("--dados", action="store_true", help="também carrega db/dados (bairros, lojas, catálogo inicial)")
     p.add_argument("--marcar-ate", metavar="NNNN", help="registra sem rodar as migrações até este número")
+    p.add_argument("--pasta", type=Path, help="pasta db/ com migrations e dados (padrão: procurada automaticamente)")
     args = p.parse_args(argv)
-    for nome in migrar(os.environ["DATABASE_URL"], dados=args.dados, marcar_ate=args.marcar_ate):
+    aplicadas = migrar(os.environ["DATABASE_URL"], pasta_db=args.pasta, dados=args.dados, marcar_ate=args.marcar_ate)
+    for nome in aplicadas:
         print(nome)
+    if not any(n.endswith(".sql") and not n.startswith("dados/") for n in aplicadas):
+        print("nenhuma migração pendente")
     return 0
 
 

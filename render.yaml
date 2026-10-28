@@ -1,12 +1,12 @@
 # API do SC Mercados no Render, plano gratuito (sem cartão).
 # O servidor dorme depois de 15 min sem uso; a primeira chamada depois disso leva de 30 a 60 s.
-# Banco: Supabase (São Paulo). Migrações e coleta rodam no GitHub Actions (.github/workflows).
+# Banco: Supabase (us-east-2, Ohio). Migrações e coleta rodam no GitHub Actions (.github/workflows).
 services:
   - type: web
     name: sc-mercados-api
     runtime: docker
     plan: free
-    region: virginia  # a região do Render mais perto do banco em São Paulo
+    region: ohio  # mesma região do banco no Supabase (us-east-2)
     dockerfilePath: ./backend/Dockerfile
     dockerContext: .
     healthCheckPath: /v1/saude

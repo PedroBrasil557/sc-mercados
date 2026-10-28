@@ -83,13 +83,13 @@ Fica desligada até a variável de repositório `COLETA_ATIVA=true` e o segredo 
 
 | Parte | Onde | Custo |
 |---|---|---|
-| Banco | Supabase, região São Paulo | grátis |
-| API | Render, plano free (`render.yaml`), região Virgínia | grátis, sem cartão; dorme após 15 min sem uso (1ª chamada leva 30–60 s) |
+| Banco | Supabase, região us-east-2 (Ohio, EUA) | grátis |
+| API | Render, plano free (`render.yaml`), região Ohio, junto do banco | grátis, sem cartão; dorme após 15 min sem uso (1ª chamada leva 30–60 s) |
 | Migrações e coleta | GitHub Actions neste repositório privado | grátis (2.000 min/mês; a coleta usa ~400) |
 
 Uma vez, por quem é dono das contas:
 
-1. **Supabase** (supabase.com, entrar com o GitHub): *New project* → região **South America (São Paulo)** → guarde a senha.
+1. **Supabase** (supabase.com, entrar com o GitHub): *New project* → guarde a senha (o projeto atual está em us-east-2; ver docs/decisoes.md).
    Em *Connect* → **Session pooler**, copie a URL `postgresql://postgres.<ref>:<senha>@aws-0-sa-east-1.pooler.supabase.com:5432/postgres`
    (o Render e o GitHub Actions só têm IPv4: a conexão direta do Supabase não serve).
 2. **GitHub**: em *Settings → Secrets and variables → Actions*, crie o segredo `DATABASE_URL` (URL do passo 1) e a variável

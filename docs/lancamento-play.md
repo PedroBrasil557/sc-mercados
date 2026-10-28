@@ -23,7 +23,7 @@ Exigências conferidas nas páginas oficiais em 28/10/2026. Conta: **pessoal** (
 
 ## Políticas e formulários
 
-- [ ] Política de privacidade em página web pública (não pode ser PDF), com link no Console e dentro do app. Passar pelo advogado.
+- [ ] Política de privacidade em página web pública (não pode ser PDF), com link no Console e dentro do app. Passar pelo advogado. Precisa dizer que os dados ficam guardados nos EUA (Supabase us-east-2, Render Ohio): transferência internacional, LGPD art. 33.
 - [ ] Exclusão de conta: dentro do app (Perfil > Apagar tudo, já desenhado) **e** por link web, sem exigir o app. Apagar de verdade, não congelar. *API pronta: `DELETE /v1/eu` (28/10/2026); falta a tela e a página web.*
 - [ ] Segurança dos dados:
   - Informações financeiras > Histórico de compras: itens e preços do cupom, enviados ao servidor.
