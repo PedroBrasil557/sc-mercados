@@ -10,7 +10,7 @@ type Props = TabTriggerSlotProps & { icone: NomeIcone; rotulo: string; ref?: Ref
 
 /** Botão da barra inferior: a aba ativa ganha a pílula amarela da etiqueta atrás do ícone. */
 export function BotaoDeAba({ icone, rotulo, isFocused, ref, ...props }: Props) {
-  const { cor, medida } = useTema();
+  const { cor } = useTema();
   return (
     <Pressable
       {...props}
@@ -20,13 +20,7 @@ export function BotaoDeAba({ icone, rotulo, isFocused, ref, ...props }: Props) {
       accessibilityLabel={rotulo}
       style={estilos.botao}
     >
-      <View
-        style={[
-          estilos.pilula,
-          { borderRadius: medida.raioPilula },
-          isFocused && { backgroundColor: cor.marcaEtiqueta },
-        ]}
-      >
+      <View style={[estilos.pilula, isFocused && { backgroundColor: cor.marcaEtiqueta }]}>
         <Icone nome={icone} cor={isFocused ? cor.marcaSobreEtiqueta : cor.textoSuave} />
       </View>
       <Text
@@ -41,5 +35,6 @@ export function BotaoDeAba({ icone, rotulo, isFocused, ref, ...props }: Props) {
 
 const estilos = StyleSheet.create({
   botao: { flex: 1, alignItems: "center", gap: 4, minHeight: 56, paddingTop: 8, paddingBottom: 6 },
-  pilula: { width: 56, height: 32, alignItems: "center", justifyContent: "center" },
+  // Raio = metade da altura. O Android ignora raios maiores que a própria view (o 999 do token virava retângulo).
+  pilula: { width: 56, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
 });
