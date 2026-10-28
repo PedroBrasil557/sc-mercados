@@ -9,12 +9,13 @@
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#F2F4EF",
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "br.com.scmercados"
     },
     "android": {
-      "package": "app.quantofica",
+      "package": "br.com.scmercados",
       "adaptiveIcon": {
-        "backgroundColor": "#0F3B2E",
+        "backgroundColor": "#FFD43B",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
