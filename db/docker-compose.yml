@@ -1,0 +1,16 @@
+# PostgreSQL local para desenvolvimento e testes. Em produção: Supabase (região São Paulo).
+services:
+  banco:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: quantofica
+      POSTGRES_PASSWORD: local-apenas
+      POSTGRES_DB: quantofica
+    ports:
+      - "54329:5432"
+    volumes:
+      - ./migrations:/migrations:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quantofica"]
+      interval: 2s
+      retries: 30
