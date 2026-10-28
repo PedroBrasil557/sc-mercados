@@ -19,7 +19,8 @@ from ..regras import ean as ean_util
 from ..regras import tamanho
 from . import robots
 
-AGENTE = "QuantoFicaColetor/0.1 (+https://quantofica.app/robo)"
+# Identificação nos sites dos mercados. A URL de contato entra quando o site do SC Mercados existir.
+AGENTE = "SCMercadosColetor/0.1"
 LOTE_SIMULACAO = 50
 
 Http = Callable[[str, dict | None], object | None]  # (url, corpo_json) -> json decodificado ou None
@@ -82,7 +83,7 @@ class ClienteHttp:
                 texto = self._bruto(f"https://{dominio}/robots.txt").decode("utf-8", "replace")
             except (urllib.error.URLError, TimeoutError):
                 texto = ""
-            self._robots[dominio] = robots.ler(texto, "QuantoFicaColetor")
+            self._robots[dominio] = robots.ler(texto, "SCMercadosColetor")
         return self._robots[dominio]
 
     def __call__(self, url: str, corpo: dict | None = None):

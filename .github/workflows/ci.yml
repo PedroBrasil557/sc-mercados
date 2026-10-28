@@ -8,6 +8,19 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: quantofica
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: quantofica
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U quantofica" --health-interval 2s --health-retries 30
+    env:
+      # Os testes de integração recriam o banco quantofica_teste a partir de db/migrations.
+      TEST_ADMIN_DATABASE_URL: postgresql://quantofica:ci@localhost:5432/postgres
     defaults:
       run:
         working-directory: backend
@@ -17,8 +30,8 @@ jobs:
         with:
           python-version: "3.13"
       - run: python -m pip install -e ".[dev]"
-      - run: ruff check src tests
-      - run: ruff format --check src tests
+      - run: ruff check src tests scripts
+      - run: ruff format --check src tests scripts
       - run: python -m pytest
 
   banco:
@@ -40,5 +53,20 @@ jobs:
       PGDATABASE: quantofica
     steps:
       - uses: actions/checkout@v4
-      - run: psql -v ON_ERROR_STOP=1 -f db/migrations/0001_inicial.sql
+      - run: for f in db/migrations/*.sql; do psql -v ON_ERROR_STOP=1 -f "$f"; done
       - run: psql -v ON_ERROR_STOP=1 -f db/testar.sql
+      - run: for f in db/dados/*.sql; do psql -v ON_ERROR_STOP=1 -q -f "$f"; done
+
+  mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run tipos --workspace apps/mobile
+      - run: npm run lint --workspace apps/mobile
+      - run: npx expo-doctor@1.21.5
+        working-directory: apps/mobile

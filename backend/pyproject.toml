@@ -1,12 +1,18 @@
 [project]
 name = "quantofica"
 version = "0.1.0"
-description = "Backend do Quanto Fica: regras de negócio, coleta de preços, API e agentes"
+description = "Backend do SC Mercados: regras de negócio, coleta de preços, API e agentes"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "psycopg[binary,pool]>=3.2",
+  "pydantic>=2.8",
+  "tzdata>=2024.1",  # fusos horários na imagem slim do container
+]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = ["pytest>=8", "ruff>=0.6", "httpx>=0.27"]
 
 [build-system]
 requires = ["setuptools>=69"]

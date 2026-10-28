@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "SC Mercados",
+    "slug": "sc-mercados",
+    "scheme": "scmercados",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "backgroundColor": "#F2F4EF",
+    "ios": {
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "app.quantofica",
+      "adaptiveIcon": {
+        "backgroundColor": "#0F3B2E",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0F3B2E",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160
+        }
+      ],
+      "expo-secure-store"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

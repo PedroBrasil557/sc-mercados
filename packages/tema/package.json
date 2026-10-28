@@ -1,0 +1,7 @@
+{
+  "name": "@quantofica/tema",
+  "version": "0.1.0",
+  "private": true,
+  "main": "tema.ts",
+  "types": "tema.ts"
+}

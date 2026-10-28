@@ -1,1 +1,1 @@
-"""Backend do Quanto Fica: regras, coleta de preços, API e agentes."""
+"""Backend do SC Mercados: regras, coleta de preços, API e agentes."""

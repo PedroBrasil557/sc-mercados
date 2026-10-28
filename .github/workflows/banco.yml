@@ -1,0 +1,35 @@
+name: Migrações do banco
+
+# Aplica as migrações pendentes e os dados iniciais no Supabase quando eles mudam na main.
+# (O plano gratuito do Render não roda comando antes da publicação, então isso fica aqui.)
+on:
+  push:
+    branches: [main]
+    paths:
+      - "db/migrations/**"
+      - "db/dados/**"
+      - "backend/src/quantofica/banco/**"
+  workflow_dispatch:
+
+concurrency:
+  group: banco
+  cancel-in-progress: false
+
+jobs:
+  migrar:
+    if: vars.COLETA_ATIVA == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install .
+      - name: Migrar
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m quantofica.banco.migrar --dados
