@@ -71,34 +71,34 @@ A conta opcional (e-mail/Google, R16) entra depois; até lá o token do aparelho
 
 ## Coleta agendada
 
-O processo `coletor` (ver `fly.toml`) roda `python -m quantofica.coleta.relogio`: coleta todo dia às 5h e na quinta às
-15h (Brasília), quando os encartes entram nos sites. A cada rodada:
+`.github/workflows/coleta.yml` roda todo dia às 5h e na quinta às 15h (Brasília), quando os encartes entram nos sites.
+Fica desligada até a variável de repositório `COLETA_ATIVA=true` e o segredo `DATABASE_URL` existirem. A cada rodada:
 
 - só o preço simulado na loja física vira observação (o de catálogo é regional);
 - embalagem múltipla, loja não cadastrada e preço mais de 50% longe da mediana vão para a fila de revisão;
 - o monitor de qualidade confere se alguma rede está sem coleta há mais de 26 h, se a cobertura caiu mais de 10%
   e se o mesmo EAN aparece com tamanhos diferentes entre redes.
 
-## Publicar (Supabase + Fly.io, região São Paulo)
+## Publicar (tudo gratuito na fase de testes)
+
+| Parte | Onde | Custo |
+|---|---|---|
+| Banco | Supabase, região São Paulo | grátis |
+| API | Render, plano free (`render.yaml`), região Virgínia | grátis, sem cartão; dorme após 15 min sem uso (1ª chamada leva 30–60 s) |
+| Migrações e coleta | GitHub Actions neste repositório privado | grátis (2.000 min/mês; a coleta usa ~400) |
 
 Uma vez, por quem é dono das contas:
 
-1. **Supabase** (supabase.com, entrar com o GitHub): *New project* → região **South America (São Paulo)** → guarde a senha
-   do banco. Em *Connect* → *Session pooler*, copie a URL `postgresql://postgres.<ref>:<senha>@aws-0-sa-east-1.pooler.supabase.com:5432/postgres`.
-2. **Fly.io** (fly.io, cadastro com cartão; duas máquinas pequenas sempre ligadas, API e coletor, dão cerca de US$ 7 por mês):
-   instale o `flyctl` (`iwr https://fly.io/install.ps1 -useb | iex` no PowerShell) e rode `fly auth login`.
-3. Na raiz do repositório:
+1. **Supabase** (supabase.com, entrar com o GitHub): *New project* → região **South America (São Paulo)** → guarde a senha.
+   Em *Connect* → **Session pooler**, copie a URL `postgresql://postgres.<ref>:<senha>@aws-0-sa-east-1.pooler.supabase.com:5432/postgres`
+   (o Render e o GitHub Actions só têm IPv4: a conexão direta do Supabase não serve).
+2. **GitHub**: em *Settings → Secrets and variables → Actions*, crie o segredo `DATABASE_URL` (URL do passo 1) e a variável
+   `COLETA_ATIVA` = `true`. Rode o workflow **Migrações do banco** uma vez (*Actions → Run workflow*).
+3. **Render** (render.com, entrar com o GitHub, sem cartão): *New → Blueprint* → escolha este repositório → preencha
+   `DATABASE_URL` com a mesma URL → *Apply*. A API fica em `https://sc-mercados-api.onrender.com/v1/saude`.
 
-```bash
-fly apps create sc-mercados-api
-fly secrets set DATABASE_URL="<URL do passo 1>"
-fly deploy            # roda as migrações e os dados iniciais antes de subir a API e o coletor
-fly status            # máquinas app e coletor rodando
-curl https://sc-mercados-api.fly.dev/v1/saude
-```
-
-Cada `fly deploy` seguinte aplica só as migrações novas (`migracao_aplicada`). Todas as tabelas têm RLS ligado sem
-política: a API REST do Supabase, aberta com a chave pública, não lê nem grava nada (`db/testar.sql` confere).
+Todas as tabelas têm RLS ligado sem política: a API REST do Supabase, aberta com a chave pública, não lê nem grava nada
+(`db/testar.sql` confere). O projeto gratuito do Supabase pausa após 7 dias sem uso; a coleta diária grava todo dia.
 
 ## Dados de terceiros
 

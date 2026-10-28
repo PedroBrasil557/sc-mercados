@@ -1,4 +1,6 @@
-"""Relógio da coleta: processo que fica de pé na Fly.io e dispara a coleta nos horários combinados.
+"""Relógio da coleta: processo sempre de pé que dispara a coleta nos horários combinados.
+
+Hoje a coleta roda pelo GitHub Actions (.github/workflows/coleta.yml); este relógio serve para um servidor próprio.
 
 Todo dia às 5h e na quinta às 15h (horário de Brasília), quando os encartes da semana entram nos sites.
     python -m quantofica.coleta.relogio [--agora]

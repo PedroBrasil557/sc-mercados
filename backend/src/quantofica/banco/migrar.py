@@ -1,6 +1,6 @@
 """Aplica as migrações pendentes (db/migrations) e, com --dados, os dados iniciais (db/dados).
 
-Roda sozinho a cada publicação na Fly.io (release_command), antes de a nova versão da API entrar no ar.
+Roda no GitHub Actions (.github/workflows/banco.yml) sempre que as migrações ou os dados mudam na main.
 Cada migração roda numa transação e fica registrada em `migracao_aplicada`: publicar de novo não reaplica nada.
 Os arquivos de db/dados são idempotentes (on conflict), então rodam sempre.
 
