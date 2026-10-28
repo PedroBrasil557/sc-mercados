@@ -52,6 +52,13 @@ class TestTamanho:
             ("Kit Shampoo + Condicionador", True),
             ("Papel Higiênico Folha Dupla Neutro Duetto 30m Pacote 12 Unidades", False),
             ("Macarrão de Sêmola Espaguete 8 Galo Pacote 500g", False),
+            # Coleta de 28/10/2026: "KitKat" não é kit (os três foram parar na revisão à toa)
+            ("Wafer Kitkat Pacote 41,5g", False),
+            ("Mini Chocolate ao Leite Kit Kat Nestle 41,5g", False),
+            ("Chocolate KITKAT 4 Fingers ao Leite 41,5g NESTLÉ", False),
+            ("Kit Kat Pack com 3 Unidades 41,5g Cada", True),
+            ("Leite Condensado Moça 3 x 395g", True),
+            ("Kit de Panelas", True),
         ],
     )
     def test_embalagem_multipla(self, nome, esperado):

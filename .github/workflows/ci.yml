@@ -30,8 +30,8 @@ jobs:
         with:
           python-version: "3.13"
       - run: python -m pip install -e ".[dev]"
-      - run: ruff check src tests
-      - run: ruff format --check src tests
+      - run: ruff check src tests scripts
+      - run: ruff format --check src tests scripts
       - run: python -m pytest
 
   banco:
@@ -55,6 +55,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: for f in db/migrations/*.sql; do psql -v ON_ERROR_STOP=1 -f "$f"; done
       - run: psql -v ON_ERROR_STOP=1 -f db/testar.sql
+      - run: for f in db/dados/*.sql; do psql -v ON_ERROR_STOP=1 -q -f "$f"; done
 
   mobile:
     runs-on: ubuntu-latest
@@ -67,3 +68,5 @@ jobs:
       - run: npm ci
       - run: npm run tipos --workspace apps/mobile
       - run: npm run lint --workspace apps/mobile
+      - run: npx expo-doctor@1.21.5
+        working-directory: apps/mobile

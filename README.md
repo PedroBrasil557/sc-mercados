@@ -20,6 +20,8 @@ cd db
 docker compose -p quantofica up -d --wait
 for f in migrations/*.sql; do docker compose -p quantofica exec -T banco psql -U quantofica -d quantofica -v ON_ERROR_STOP=1 < "$f"; done
 docker compose -p quantofica exec -T banco psql -U quantofica -d quantofica < testar.sql
+# Dados iniciais: bairros e lojas de Blumenau, categorias e o catálogo das cestas validadas
+for f in dados/*.sql; do docker compose -p quantofica exec -T banco psql -U quantofica -d quantofica -q < "$f"; done
 
 # Backend: os testes de integração usam o Postgres acima (banco quantofica_teste, recriado a cada módulo)
 cd backend
@@ -31,6 +33,10 @@ python -m venv .venv
 # API
 export DATABASE_URL=postgresql://quantofica:local-apenas@localhost:54329/quantofica
 .venv/Scripts/uvicorn quantofica.api.app:create_app --factory --reload   # documentação em http://localhost:8000/docs
+
+# Regerar os dados iniciais (consulta as redes e o OpenStreetMap)
+.venv/Scripts/python scripts/gerar_cadastro_blumenau.py
+.venv/Scripts/python scripts/gerar_catalogo_inicial.py
 
 # Coleta de uma rede (faz requisições reais, 1 por segundo)
 .venv/Scripts/python -m quantofica.coleta.agendador --rede giassi
@@ -47,13 +53,19 @@ cd packages/tema && python gerar_tema.py
 
 | Rota | O que faz |
 |---|---|
+| `GET /v1/bairros` | Bairros da cidade (pública: vem antes do cadastro) |
+| `POST /v1/aparelhos` | Primeira abertura: cria a casa, o membro e a lista, e devolve o token do aparelho |
+| `POST /v1/casa/convites` | Código para a família entrar na casa (48 h, até 10 entradas) |
+| `POST /v1/convites/{codigo}` | Outro aparelho entra na casa e recebe o próprio token |
+| `GET /v1/eu` / `DELETE /v1/eu` | Dados da casa / exclusão da conta (LGPD art. 18, Google Play) |
 | `POST /v1/listas/{id}/operacoes` | Recebe operações do aparelho (R15). Reenviar a mesma operação não duplica |
 | `GET /v1/listas/{id}/operacoes?desde=N` | Operações gravadas depois do cursor N, para os outros aparelhos se atualizarem |
 | `GET /v1/listas/{id}` | Itens da lista agora, com o aviso quando alguém da casa tinha removido o item |
 | `GET /v1/precos?loja_id=…&produto_id=…` | Preço atual de cada produto na loja (R5, R6) |
 | `POST /v1/comparar` | Total da lista na loja mais próxima de cada rede e a melhor divisão entre duas (R7, R8, R13, R14) |
 
-Ainda sem autenticação: a identificação do aparelho e da conta (R16) entra antes de qualquer publicação.
+Todas as rotas, menos bairros, cadastro e convite, pedem `Authorization: Bearer <token>`. Lista de outra casa responde 404.
+A conta opcional (e-mail/Google, R16) entra depois; até lá o token do aparelho identifica o membro.
 
 ## Coleta agendada
 
@@ -64,6 +76,10 @@ produção (variável `COLETA_ATIVA=true` e segredo `DATABASE_URL`). A cada roda
 - embalagem múltipla, loja não cadastrada e preço mais de 50% longe da mediana vão para a fila de revisão;
 - o monitor de qualidade confere se alguma rede está sem coleta há mais de 26 h, se a cobertura caiu mais de 10%
   e se o mesmo EAN aparece com tamanhos diferentes entre redes.
+
+## Dados de terceiros
+
+Bairros e lojas das redes sem site: © colaboradores do OpenStreetMap, licença ODbL. A atribuição precisa aparecer na tela "Sobre" do app.
 
 ## Regras do projeto
 

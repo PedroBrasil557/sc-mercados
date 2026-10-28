@@ -29,7 +29,8 @@ _UNIDADES = {
     "rolos": ("un", 1),
 }
 _RE_TAMANHO = re.compile(r"(\d+(?:[.,]\d+)?)\s*(kg|g|ml|l|litros?|un|unidades|rolos)\b")
-_RE_MULTIPLA = re.compile(r"\b(pack|kit|fardo|leve \d+ pague|\d+\s*x\s*\d)")
+_RE_MULTIPLA = re.compile(r"\b(?:(?:pack|kit|fardo)\b|leve \d+ pague|\d+\s*x\s*\d)")
+_MARCAS_COM_KIT = re.compile(r"\bkit\s?kat\b")  # chocolate, não kit
 
 
 def _simplificar(texto: str) -> str:
@@ -49,7 +50,7 @@ def extrair(nome: str) -> Tamanho | None:
 
 def embalagem_multipla(nome: str) -> bool:
     """Pack, kit, fardo, "leve X pague Y" ou "N x 500 g" (ex.: Barilla "Pack com 3 Unidades")."""
-    texto = _simplificar(nome)
+    texto = _MARCAS_COM_KIT.sub(" ", _simplificar(nome))
     if _RE_MULTIPLA.search(texto):
         return True
     return bool(re.search(r"\bcom \d+ unidades\b", texto)) and not re.search(r"\b(rolos|papel higienico)\b", texto)

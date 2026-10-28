@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
-from . import listas, precos
+from . import identidade, listas, precos
 
 
 def create_app(dsn: str | None = None) -> FastAPI:
@@ -32,6 +32,7 @@ def create_app(dsn: str | None = None) -> FastAPI:
     def saude():
         return {"ok": True}
 
+    app.include_router(identidade.router)
     app.include_router(listas.router)
     app.include_router(precos.router)
     return app

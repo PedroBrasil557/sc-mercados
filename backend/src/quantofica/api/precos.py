@@ -12,7 +12,8 @@ from pydantic import BaseModel, Field, model_validator
 from ..regras import totais
 from ..regras.preco import Estado, Faixa, Fonte, Observacao, PrecoExibido, preco_atual
 from .banco import Conexao
-from .listas import estado as estado_lista
+from .identidade import MembroAtual
+from .listas import estado_da_lista, lista_da_casa
 
 router = APIRouter(prefix="/v1", tags=["preços"])
 
@@ -63,7 +64,7 @@ def _exibir(p: PrecoExibido) -> dict:
 
 
 @router.get("/precos")
-def precos(loja_id: UUID, produto_id: Annotated[list[UUID], Query(max_length=200)], conn: Conexao):
+def precos(loja_id: UUID, produto_id: Annotated[list[UUID], Query(max_length=200)], membro: MembroAtual, conn: Conexao):
     atuais = precos_atuais(conn, [loja_id], produto_id, datetime.now(UTC)).get(str(loja_id), {})
     return {"loja_id": loja_id, "precos": {pid: _exibir(p) for pid, p in atuais.items()}}
 
@@ -86,16 +87,17 @@ def _centavos(v) -> int:
 
 
 @router.post("/comparar")
-def comparar(pedido: PedidoComparacao, conn: Conexao):
+def comparar(pedido: PedidoComparacao, membro: MembroAtual, conn: Conexao):
     bairro = conn.execute(
         "select id, cidade_id, lat_centro, lon_centro from bairro where id = %s", (pedido.bairro_id,)
     ).fetchone()
     if not bairro:
         raise HTTPException(404, "bairro não encontrado")
     if pedido.lista_id:
+        lista_da_casa(conn, pedido.lista_id, membro)
         itens = {
             str(i["produto_id"]): Decimal(i["quantidade"])
-            for i in estado_lista(pedido.lista_id, conn)["itens"]
+            for i in estado_da_lista(conn, pedido.lista_id)["itens"]
             if i["produto_id"]
         }
     else:

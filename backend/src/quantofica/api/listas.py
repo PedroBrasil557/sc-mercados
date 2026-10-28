@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from ..regras.lista import Operacao, Tipo, aplicar
 from .banco import Conexao
+from .identidade import Membro, MembroAtual
 
 router = APIRouter(prefix="/v1/listas", tags=["listas"])
 
@@ -21,8 +22,7 @@ class OperacaoEntrada(BaseModel):
     id: UUID  # gerado no aparelho: reenviar a mesma operação não duplica
     item_id: UUID
     tipo: Literal["criar", "somar", "tirar", "marcar", "desmarcar", "remover"]
-    feita_em: datetime
-    membro_id: UUID | None = None
+    feita_em: datetime  # quem fez vem do token, nunca do corpo
     valor: Decimal | None = Field(default=None, gt=0, max_digits=10, decimal_places=3)
     produto_id: UUID | None = None  # só em "criar"
     categoria_id: str | None = None  # item genérico (R3)
@@ -41,8 +41,10 @@ class LoteOperacoes(BaseModel):
     operacoes: list[OperacaoEntrada] = Field(min_length=1, max_length=500)
 
 
-def _lista_existe(conn: Connection, lista_id: UUID) -> None:
-    if not conn.execute("select 1 from lista where id = %s", (lista_id,)).fetchone():
+def lista_da_casa(conn: Connection, lista_id: UUID, membro: Membro, travar: bool = False) -> None:
+    """Só quem é da casa enxerga a lista. Lista de outra casa responde 404, como se não existisse."""
+    trava = " for update" if travar else ""
+    if not conn.execute(f"select 1 from lista where id = %s and casa_id = %s{trava}", (lista_id, membro.casa_id)).fetchone():
         raise HTTPException(404, "lista não encontrada")
 
 
@@ -51,17 +53,12 @@ def _cursor(conn: Connection, lista_id: UUID) -> int:
 
 
 @router.post("/{lista_id}/operacoes")
-def receber(lista_id: UUID, lote: LoteOperacoes, conn: Conexao):
+def receber(lista_id: UUID, lote: LoteOperacoes, membro: MembroAtual, conn: Conexao):
     novas = 0
     with conn.transaction():
         # Trava a lista: envios da mesma casa entram um de cada vez, então o `seq` cresce na ordem de
         # gravação e quem lê "depois de N" nunca pula uma operação que ainda não tinha sido gravada.
-        lista = conn.execute("select casa_id from lista where id = %s for update", (lista_id,)).fetchone()
-        if not lista:
-            raise HTTPException(404, "lista não encontrada")
-        membros = {r["id"] for r in conn.execute("select id from membro where casa_id = %s", (lista["casa_id"],)).fetchall()}
-        if any(op.membro_id and op.membro_id not in membros for op in lote.operacoes):
-            raise HTTPException(422, "membro não pertence à casa desta lista")
+        lista_da_casa(conn, lista_id, membro, travar=True)
         pedidos = {op.produto_id for op in lote.operacoes if op.produto_id}
         if pedidos:
             achados = {r["id"] for r in conn.execute("select id from produto where id = any(%s)", (list(pedidos),)).fetchall()}
@@ -72,12 +69,12 @@ def receber(lista_id: UUID, lote: LoteOperacoes, conn: Conexao):
                 conn.execute(
                     """insert into item_lista (id, lista_id, produto_id, categoria_id, quantidade, adicionado_por)
                        values (%s, %s, %s, %s, %s, %s) on conflict (id) do nothing""",
-                    (op.item_id, lista_id, op.produto_id, op.categoria_id, op.valor or 1, op.membro_id),
+                    (op.item_id, lista_id, op.produto_id, op.categoria_id, op.valor or 1, membro.id),
                 )
             cur = conn.execute(
                 """insert into operacao_lista (id, lista_id, item_id, membro_id, tipo, valor, feita_em)
                    values (%s, %s, %s, %s, %s, %s, %s) on conflict (id) do nothing returning seq""",
-                (op.id, lista_id, op.item_id, op.membro_id, op.tipo, op.valor, op.feita_em),
+                (op.id, lista_id, op.item_id, membro.id, op.tipo, op.valor, op.feita_em),
             )
             novas += cur.rowcount
     return {"recebidas": len(lote.operacoes), "novas": novas, "cursor": _cursor(conn, lista_id)}
@@ -86,12 +83,13 @@ def receber(lista_id: UUID, lote: LoteOperacoes, conn: Conexao):
 @router.get("/{lista_id}/operacoes")
 def desde(
     lista_id: UUID,
+    membro: MembroAtual,
     conn: Conexao,
     desde: Annotated[int, Query(ge=0)] = 0,
     limite: Annotated[int, Query(ge=1, le=1000)] = 500,
 ):
     """Operações recebidas depois do cursor `desde`, para o aparelho se atualizar."""
-    _lista_existe(conn, lista_id)
+    lista_da_casa(conn, lista_id, membro)
     linhas = conn.execute(
         """select seq, id, item_id, membro_id, tipo, valor, feita_em from operacao_lista
            where lista_id = %s and seq > %s order by seq limit %s""",
@@ -101,9 +99,13 @@ def desde(
 
 
 @router.get("/{lista_id}")
-def estado(lista_id: UUID, conn: Conexao):
+def estado(lista_id: UUID, membro: MembroAtual, conn: Conexao):
     """Itens da lista agora, calculados a partir de todas as operações (R15)."""
-    _lista_existe(conn, lista_id)
+    lista_da_casa(conn, lista_id, membro)
+    return estado_da_lista(conn, lista_id)
+
+
+def estado_da_lista(conn: Connection, lista_id: UUID) -> dict:
     ops = conn.execute(
         "select id, item_id, membro_id, tipo, valor, feita_em from operacao_lista where lista_id = %s", (lista_id,)
     ).fetchall()
