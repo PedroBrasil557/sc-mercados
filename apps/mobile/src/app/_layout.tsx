@@ -15,12 +15,14 @@ import * as SystemUI from "expo-system-ui";
 import { useEffect } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { useSincroniaAutomatica } from "@/lista/sincronia";
 import { useTema } from "@/tema";
 
 SplashScreen.preventAutoHideAsync();
 
 export default function RaizLayout() {
   const { cor, modo } = useTema();
+  useSincroniaAutomatica();
   const [carregou, erro] = useFonts({
     BricolageGrotesque_600SemiBold,
     BricolageGrotesque_700Bold,

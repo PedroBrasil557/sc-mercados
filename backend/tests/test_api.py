@@ -196,6 +196,18 @@ def test_comparar_exige_lista_ou_itens(api, dados, casa):
     assert api.post("/v1/comparar", headers=casa["ana"], json={"bairro_id": str(dados["bairro"])}).status_code == 422
 
 
+def test_busca_no_catalogo_ignora_acento_e_maiuscula(api, casa):
+    def nomes(busca):
+        return [p["nome"] for p in api.get("/v1/produtos", headers=casa["ana"], params={"busca": busca}).json()]
+
+    assert nomes("cafe") == ["Café tradicional"]
+    assert nomes("PILÃO") == ["Café tradicional"]  # pela marca
+    assert nomes("arroz kiarroz") == ["Arroz tipo 1"]  # todas as palavras
+    assert nomes("feijão") == []
+    assert len(nomes("")) == 2  # sem busca: o catálogo
+    assert api.get("/v1/produtos").status_code == 401
+
+
 def test_bairros_sao_publicos(api):
     assert [b["nome"] for b in api.get("/v1/bairros").json()] == ["Victor Konder"]
 

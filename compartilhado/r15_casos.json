@@ -1,0 +1,99 @@
+{
+  "_sobre": "Casos da regra R15 (lista por operações). Os MESMOS casos testam o servidor (backend/tests/test_r15_casos.py) e o app (apps/mobile/src/lista/regras.test.ts): os dois lados não podem discordar. 'segundos' conta a partir de 2026-10-28T12:00:00Z. Cada caso também é aplicado em todas as ordens de chegada das operações.",
+  "casos": [
+    {
+      "nome": "dois +1 ao mesmo tempo viram dois",
+      "operacoes": [
+        { "id": "1", "item": "leite", "tipo": "criar", "segundos": 0, "membro": "ana" },
+        { "id": "2", "item": "leite", "tipo": "somar", "segundos": 10, "membro": "ana" },
+        { "id": "3", "item": "leite", "tipo": "somar", "segundos": 10, "membro": "paulo" }
+      ],
+      "esperado": { "leite": { "quantidade": 3, "comprado": false, "removido": false, "aviso": null } }
+    },
+    {
+      "nome": "ordem de chegada não muda o resultado",
+      "operacoes": [
+        { "id": "1", "item": "leite", "tipo": "criar", "segundos": 0, "membro": "ana", "valor": 12 },
+        { "id": "2", "item": "leite", "tipo": "tirar", "segundos": 5, "membro": "ana" },
+        { "id": "3", "item": "leite", "tipo": "somar", "segundos": 6, "membro": "paulo" },
+        { "id": "4", "item": "leite", "tipo": "marcar", "segundos": 9, "membro": "ana" }
+      ],
+      "esperado": { "leite": { "quantidade": 12, "comprado": true, "removido": false, "aviso": null } }
+    },
+    {
+      "nome": "remover e somar ao mesmo tempo: o item fica, com aviso",
+      "nomes": { "paulo": "Paulo" },
+      "operacoes": [
+        { "id": "1", "item": "leite", "tipo": "criar", "segundos": 0, "membro": "ana" },
+        { "id": "2", "item": "leite", "tipo": "remover", "segundos": 20, "membro": "paulo" },
+        { "id": "3", "item": "leite", "tipo": "somar", "segundos": 21, "membro": "ana" }
+      ],
+      "esperado": { "leite": { "quantidade": 1, "comprado": false, "removido": false, "aviso": "Paulo tinha removido este item" } }
+    },
+    {
+      "nome": "quem removeu sem nome conhecido aparece como alguém da casa",
+      "operacoes": [
+        { "id": "1", "item": "leite", "tipo": "criar", "segundos": 0, "membro": "ana" },
+        { "id": "2", "item": "leite", "tipo": "remover", "segundos": 20, "membro": "paulo" },
+        { "id": "3", "item": "leite", "tipo": "somar", "segundos": 21, "membro": "ana" }
+      ],
+      "esperado": { "leite": { "quantidade": 1, "comprado": false, "removido": false, "aviso": "Alguém da casa tinha removido este item" } }
+    },
+    {
+      "nome": "remover por último remove",
+      "operacoes": [
+        { "id": "1", "item": "leite", "tipo": "criar", "segundos": 0, "membro": "ana" },
+        { "id": "2", "item": "leite", "tipo": "somar", "segundos": 5, "membro": "ana" },
+        { "id": "3", "item": "leite", "tipo": "remover", "segundos": 9, "membro": "paulo" }
+      ],
+      "esperado": { "leite": { "quantidade": 2, "comprado": false, "removido": true, "aviso": null } }
+    },
+    {
+      "nome": "tirar até zero remove e não fica negativo",
+      "operacoes": [
+        { "id": "1", "item": "leite", "tipo": "criar", "segundos": 0, "membro": "ana" },
+        { "id": "2", "item": "leite", "tipo": "tirar", "segundos": 1, "membro": "ana" },
+        { "id": "3", "item": "leite", "tipo": "tirar", "segundos": 2, "membro": "ana" }
+      ],
+      "esperado": { "leite": { "quantidade": 0, "comprado": false, "removido": true, "aviso": null } }
+    },
+    {
+      "nome": "readicionar o próprio item não gera aviso",
+      "operacoes": [
+        { "id": "1", "item": "leite", "tipo": "criar", "segundos": 0, "membro": "ana" },
+        { "id": "2", "item": "leite", "tipo": "remover", "segundos": 1, "membro": "ana" },
+        { "id": "3", "item": "leite", "tipo": "somar", "segundos": 2, "membro": "ana" }
+      ],
+      "esperado": { "leite": { "quantidade": 1, "comprado": false, "removido": false, "aviso": null } }
+    },
+    {
+      "nome": "quantidade fracionada (banana em kg)",
+      "operacoes": [
+        { "id": "1", "item": "banana", "tipo": "criar", "segundos": 0, "membro": "ana", "valor": 1.5 },
+        { "id": "2", "item": "banana", "tipo": "somar", "segundos": 1, "membro": "ana", "valor": 0.5 }
+      ],
+      "esperado": { "banana": { "quantidade": 2, "comprado": false, "removido": false, "aviso": null } }
+    },
+    {
+      "nome": "empate de horário: desempata pelo id da operação",
+      "operacoes": [
+        { "id": "a", "item": "cafe", "tipo": "criar", "segundos": 0, "membro": "ana" },
+        { "id": "b", "item": "cafe", "tipo": "marcar", "segundos": 5, "membro": "ana" },
+        { "id": "c", "item": "cafe", "tipo": "desmarcar", "segundos": 5, "membro": "paulo" }
+      ],
+      "esperado": { "cafe": { "quantidade": 1, "comprado": false, "removido": false, "aviso": null } }
+    },
+    {
+      "nome": "duas pessoas criam o mesmo item ao mesmo tempo: soma",
+      "operacoes": [
+        { "id": "1", "item": "arroz", "tipo": "criar", "segundos": 0, "membro": "ana", "valor": 2 },
+        { "id": "2", "item": "arroz", "tipo": "criar", "segundos": 0, "membro": "paulo" },
+        { "id": "3", "item": "leite", "tipo": "criar", "segundos": 3, "membro": "paulo" }
+      ],
+      "esperado": {
+        "arroz": { "quantidade": 3, "comprado": false, "removido": false, "aviso": null },
+        "leite": { "quantidade": 1, "comprado": false, "removido": false, "aviso": null }
+      }
+    }
+  ]
+}
