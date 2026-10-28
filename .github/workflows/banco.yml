@@ -32,4 +32,4 @@ jobs:
       - name: Migrar
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: python -m quantofica.banco.migrar --dados
+        run: python -m quantofica.banco.migrar --dados --pasta ../db
