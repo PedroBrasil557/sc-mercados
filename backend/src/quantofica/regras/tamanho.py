@@ -49,8 +49,12 @@ def extrair(nome: str) -> Tamanho | None:
 
 
 def embalagem_multipla(nome: str) -> bool:
-    """Pack, kit, fardo, "leve X pague Y" ou "N x 500 g" (ex.: Barilla "Pack com 3 Unidades")."""
+    """Pack, kit, fardo, "leve X pague Y", "N x 500 g" ou "N unidades de 120 g cada".
+
+    "Com 30 unidades" sozinho não é pacote de vários: ovos com 30, filtro com 30 e fralda com 58 são o
+    próprio produto (coleta de 29/10/2026). Pacote de vários diz o tamanho de cada um.
+    """
     texto = _MARCAS_COM_KIT.sub(" ", _simplificar(nome))
     if _RE_MULTIPLA.search(texto):
         return True
-    return bool(re.search(r"\bcom \d+ unidades\b", texto)) and not re.search(r"\b(rolos|papel higienico)\b", texto)
+    return bool(re.search(r"\b\d+ unidades? de \d|\bunidades?\b.*\bcada\b", texto))

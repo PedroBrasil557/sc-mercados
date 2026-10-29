@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Painel · SC Mercados</title>
+<style nonce="{{NONCE}}">
+  :root { --fundo: #F6F4EE; --sup: #FFFFFF; --borda: #E3DFD3; --texto: #1C1F1A; --suave: #5F645A; --verde: #0E7553; --verde-suave: #E2F2EA; --amarelo: #FFD43B; --perigo: #B42318; --perigo-suave: #FDECEA; }
+  @media (prefers-color-scheme: dark) { :root { --fundo: #121411; --sup: #1C1F1A; --borda: #33372F; --texto: #EEF0EA; --suave: #A9AEA3; --verde: #4CC08F; --verde-suave: #14412F; --perigo: #F97066; --perigo-suave: #3A1715; } }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--fundo); color: var(--texto); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: var(--sup); border-bottom: 1px solid var(--borda); position: sticky; top: 0; z-index: 2; }
+  header h1 { font-size: 17px; margin: 0; }
+  .selo { background: var(--amarelo); color: #1C1F1A; font-weight: 700; font-size: 12px; padding: 2px 8px; border-radius: 6px; }
+  nav { display: flex; gap: 4px; margin-left: auto; flex-wrap: wrap; }
+  nav button, .chip { border: 1px solid var(--borda); background: var(--sup); color: var(--texto); padding: 6px 12px; border-radius: 999px; cursor: pointer; font: inherit; font-size: 14px; }
+  nav button[aria-pressed="true"], .chip[aria-pressed="true"] { background: var(--texto); color: var(--fundo); border-color: var(--texto); }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px; }
+  h2 { font-size: 16px; margin: 24px 0 10px; }
+  .grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+  .cartao { background: var(--sup); border: 1px solid var(--borda); border-radius: 12px; padding: 12px 14px; }
+  .numero { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .suave { color: var(--suave); font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; background: var(--sup); border: 1px solid var(--borda); border-radius: 12px; overflow: hidden; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--borda); font-size: 14px; vertical-align: top; }
+  th { color: var(--suave); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .03em; }
+  .ok { color: var(--verde); font-weight: 600; } .falhou { color: var(--perigo); font-weight: 600; }
+  .filtros { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
+  .item { background: var(--sup); border: 1px solid var(--borda); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; display: grid; grid-template-columns: 22px 1fr; gap: 10px; }
+  .item h3 { font-size: 15px; margin: 0 0 2px; }
+  .acoes { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .botao { border: 1px solid var(--borda); background: var(--sup); color: var(--texto); padding: 6px 12px; border-radius: 8px; cursor: pointer; font: inherit; font-size: 14px; }
+  .botao.primario { background: var(--verde); border-color: var(--verde); color: #fff; }
+  .botao.perigo { color: var(--perigo); }
+  .botao:disabled { opacity: .5; cursor: default; }
+  .busca { display: flex; gap: 6px; margin-top: 8px; }
+  input[type="search"], input[type="password"] { flex: 1; min-width: 0; padding: 7px 10px; border: 1px solid var(--borda); border-radius: 8px; background: var(--fundo); color: var(--texto); font: inherit; }
+  .resultados label { display: flex; gap: 8px; padding: 5px 2px; font-size: 14px; cursor: pointer; }
+  .preco { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .barra { position: sticky; bottom: 0; background: var(--sup); border: 1px solid var(--borda); border-radius: 12px; padding: 10px 14px; display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+  .entrar { max-width: 380px; margin: 12vh auto; }
+  .aviso { padding: 10px 14px; border-radius: 10px; background: var(--verde-suave); margin: 10px 0; }
+  .aviso.erro { background: var(--perigo-suave); color: var(--perigo); }
+  a { color: var(--verde); }
+  @media (max-width: 640px) { header { flex-wrap: wrap; } nav { margin-left: 0; } th:nth-child(n+4), td:nth-child(n+4) { display: none; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>SC Mercados</h1><span class="selo">PAINEL</span>
+  <nav id="abas" hidden>
+    <button type="button" data-aba="resumo" aria-pressed="true">Resumo</button>
+    <button type="button" data-aba="revisao" aria-pressed="false">Revisão</button>
+    <button type="button" data-aba="lojas" aria-pressed="false">Lojas</button>
+    <button type="button" id="sair">Sair</button>
+  </nav>
+</header>
+<main>
+  <form id="entrar" class="entrar cartao">
+    <h2>Entrar no painel</h2>
+    <p class="suave">Use o token do painel (fica no arquivo .env.producao, em PAINEL_TOKEN).</p>
+    <div class="busca"><input id="token" type="password" autocomplete="current-password" aria-label="Token do painel" required><button class="botao primario" type="submit">Entrar</button></div>
+    <div id="erro-entrar" class="aviso erro" hidden></div>
+  </form>
+  <section id="resumo" hidden></section>
+  <section id="revisao" hidden></section>
+  <section id="lojas" hidden></section>
+</main>
+<script nonce="{{NONCE}}">
+"use strict";
+const $ = (s) => document.querySelector(s);
+const TIPOS = { encarte: "Encarte sem produto", ean: "Embalagem", anomalia: "Alerta da coleta", reporte: "Preço reportado", cupom: "Cupom", categoria: "Categoria" };
+let token = sessionStorage.getItem("painel") || "";
+let filtro = null;
+
+function el(tag, props = {}, ...filhos) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === "class") e.className = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (v !== false && v != null) e.setAttribute(k, v === true ? "" : v);
+  }
+  for (const f of filhos.flat()) if (f != null && f !== false) e.append(f instanceof Node ? f : String(f));
+  return e;
+}
+const reais = (c) => c == null ? "—" : (c / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const quando = (d) => d ? new Date(d).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—";
+const tamanho = (q, u) => q == null ? "" : `${Number(q).toLocaleString("pt-BR")} ${u || ""}`;
+
+async function api(caminho, opcoes = {}) {
+  const r = await fetch(caminho, { ...opcoes, headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" } });
+  if (r.status === 401 || r.status === 404) { sair(); throw new Error("Token inválido."); }
+  if (r.status === 429) throw new Error("Muitas tentativas. Espere alguns minutos.");
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || `Erro ${r.status}`);
+  return r.json();
+}
+function sair() { token = ""; sessionStorage.removeItem("painel"); $("#abas").hidden = true; for (const s of ["#resumo", "#revisao", "#lojas"]) $(s).hidden = true; $("#entrar").hidden = false; }
+function mostrar(aba) {
+  for (const b of document.querySelectorAll("#abas [data-aba]")) b.setAttribute("aria-pressed", String(b.dataset.aba === aba));
+  for (const s of ["resumo", "revisao", "lojas"]) $("#" + s).hidden = s !== aba;
+  ({ resumo: carregarResumo, revisao: carregarRevisao, lojas: carregarLojas })[aba]();
+}
+function aviso(alvo, texto, erro = false) { alvo.prepend(el("div", { class: "aviso" + (erro ? " erro" : ""), role: "status" }, texto)); }
+
+$("#entrar").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  token = $("#token").value.trim();
+  try {
+    await api("/v1/painel/resumo");
+    sessionStorage.setItem("painel", token);
+    $("#entrar").hidden = true; $("#abas").hidden = false; $("#erro-entrar").hidden = true;
+    mostrar("resumo");
+  } catch (e) { $("#entrar").hidden = false; $("#erro-entrar").hidden = false; $("#erro-entrar").textContent = e.message; }
+});
+for (const b of document.querySelectorAll("#abas [data-aba]")) b.addEventListener("click", () => mostrar(b.dataset.aba));
+$("#sair").addEventListener("click", sair);
+
+async function carregarResumo() {
+  const s = $("#resumo"); s.replaceChildren(el("p", { class: "suave" }, "Carregando…"));
+  try {
+    const r = await api("/v1/painel/resumo");
+    const abertas = Object.values(r.revisao).reduce((a, b) => a + b, 0);
+    const cartao = (rotulo, n, extra) => el("div", { class: "cartao" }, el("div", { class: "suave" }, rotulo), el("div", { class: "numero" }, n.toLocaleString("pt-BR")), extra ? el("div", { class: "suave" }, extra) : null);
+    s.replaceChildren(
+      el("div", { class: "grade" },
+        cartao("Na fila de revisão", abertas, Object.entries(r.revisao).map(([t, n]) => `${TIPOS[t] || t}: ${n}`).join(" · ")),
+        cartao("Produtos no catálogo", r.produtos),
+        cartao("Lojas a confirmar", r.lojas_a_confirmar),
+        cartao("Casas usando", r.casas, `${r.membros} pessoas`)),
+      el("h2", {}, "Produtos com preço (últimos 2 dias)"),
+      el("div", { class: "grade" }, r.cobertura.map((c) => cartao(c.rede, c.produtos))),
+      el("h2", {}, "Última coleta de cada rede"),
+      el("table", {}, el("thead", {}, el("tr", {}, ["Rede", "Situação", "Preços", "Revisão", "Início", "Fim"].map((h) => el("th", {}, h)))),
+        el("tbody", {}, r.coletas.map((c) => el("tr", {},
+          el("td", {}, c.rede), el("td", { class: c.status === "ok" ? "ok" : c.status === "falhou" ? "falhou" : "" }, c.status, c.erro ? el("div", { class: "suave" }, c.erro.slice(0, 160)) : null),
+          el("td", {}, c.precos_gravados), el("td", {}, c.enviados_revisao), el("td", {}, quando(c.iniciada_em)), el("td", {}, quando(c.terminada_em)))))),
+      el("h2", {}, "Encartes lidos"),
+      el("table", {}, el("thead", {}, el("tr", {}, ["Encarte", "Válido até", "Itens", "Preços", "Lido em"].map((h) => el("th", {}, h)))),
+        el("tbody", {}, r.encartes.map((e) => el("tr", {}, el("td", {}, e.titulo, el("div", { class: "suave" }, e.rede)),
+          el("td", {}, e.valido_ate ? new Date(e.valido_ate + "T12:00").toLocaleDateString("pt-BR") : "—"), el("td", {}, e.itens), el("td", {}, e.precos), el("td", {}, quando(e.lido_em)))))));
+  } catch (e) { s.replaceChildren(); aviso(s, e.message, true); }
+}
+
+async function carregarRevisao() {
+  const s = $("#revisao"); s.replaceChildren(el("p", { class: "suave" }, "Carregando…"));
+  try {
+    const [itens, r] = await Promise.all([api("/v1/painel/revisao" + (filtro ? `?tipo=${filtro}` : "")), api("/v1/painel/resumo")]);
+    const marcados = new Set();
+    const contador = el("span", { class: "suave" }, "0 marcados");
+    const atualizar = () => { contador.textContent = `${marcados.size} marcados`; for (const b of s.querySelectorAll(".lote")) b.disabled = !marcados.size; };
+    const decidir = async (ids, status) => {
+      try { await api("/v1/painel/revisao/decidir", { method: "POST", body: JSON.stringify({ ids, status }) }); await carregarRevisao(); }
+      catch (e) { aviso(s, e.message, true); }
+    };
+    const chip = (t, rotulo, n) => el("button", { type: "button", class: "chip", "aria-pressed": String(filtro === t), onclick: () => { filtro = t; carregarRevisao(); } }, `${rotulo} (${n})`);
+    const total = Object.values(r.revisao).reduce((a, b) => a + b, 0);
+    s.replaceChildren(
+      el("div", { class: "filtros" }, chip(null, "Tudo", total), Object.entries(r.revisao).map(([t, n]) => chip(t, TIPOS[t] || t, n))),
+      itens.length ? null : el("p", { class: "suave" }, "Nada para revisar aqui."),
+      itens.map((it) => cartaoDeRevisao(it, marcados, atualizar, decidir)),
+      itens.length ? el("div", { class: "barra" }, contador,
+        el("button", { class: "botao lote", disabled: true, onclick: () => decidir([...marcados], "resolvida") }, "Marcar como resolvidos"),
+        el("button", { class: "botao perigo lote", disabled: true, onclick: () => decidir([...marcados], "descartada") }, "Descartar marcados")) : null);
+  } catch (e) { s.replaceChildren(); aviso(s, e.message, true); }
+}
+
+function cartaoDeRevisao(it, marcados, atualizar, decidir) {
+  const p = it.proposta || {};
+  const caixa = el("input", { type: "checkbox", "aria-label": "Marcar", onchange: (ev) => { ev.target.checked ? marcados.add(it.id) : marcados.delete(it.id); atualizar(); } });
+  const corpo = el("div", {});
+  if (it.tipo === "encarte") {
+    corpo.append(el("h3", {}, p.nome || it.referencia_id),
+      el("div", {}, el("span", { class: "preco" }, reais(p.preco_centavos)), p.condicional_centavos ? ` · clube/cartão ${reais(p.condicional_centavos)}` : "", el("span", { class: "suave" }, ` · ${p.encarte || ""} · pág. ${p.pagina || "?"}`)));
+    corpo.append(ligador(it, p));
+  } else {
+    corpo.append(el("h3", {}, TIPOS[it.tipo] || it.tipo), el("div", {}, it.motivo), el("div", { class: "suave" }, it.referencia_id),
+      p.preco_centavos ? el("div", { class: "suave" }, `Preço proposto: ${reais(p.preco_centavos)}`) : null);
+  }
+  corpo.append(el("div", { class: "acoes" },
+    el("button", { class: "botao", onclick: () => decidir([it.id], "resolvida") }, "Resolvido"),
+    el("button", { class: "botao perigo", onclick: () => decidir([it.id], "descartada") }, it.tipo === "encarte" ? "Não é de mercado / descartar" : "Descartar"),
+    el("span", { class: "suave" }, quando(it.criada_em))));
+  return el("article", { class: "item" }, caixa, corpo);
+}
+
+function ligador(it, p) {
+  const termos = (p.nome || "").replace(/\d+([.,]\d+)?\s*(kg|g|ml|l|litros?)\b.*$/i, "").split(/\s+/).slice(0, 3).join(" ");
+  const campo = el("input", { type: "search", value: termos, "aria-label": "Buscar produto no catálogo" });
+  const lista = el("div", { class: "resultados" });
+  const escolhidos = new Set();
+  const ligar = el("button", { class: "botao primario", disabled: true, onclick: async () => {
+    ligar.disabled = true;
+    try {
+      const r = await api(`/v1/painel/revisao/${it.id}/ligar`, { method: "POST", body: JSON.stringify({ produto_ids: [...escolhidos] }) });
+      const caixa = ligar.closest("article");
+      caixa.replaceChildren(el("span", {}), el("div", { class: "aviso" }, r.precos ? `Ligado: ${r.precos} preços publicados. Nos próximos encartes este nome casa sozinho.` : "Ligado. O encarte já venceu, então só ficou lembrado para os próximos."));
+    } catch (e) { ligar.disabled = false; aviso(lista, e.message, true); }
+  } }, "Ligar aos marcados");
+  const buscar = async () => {
+    if (campo.value.trim().length < 2) return;
+    try {
+      const produtos = await api("/v1/painel/produtos?busca=" + encodeURIComponent(campo.value.trim()));
+      lista.replaceChildren(produtos.length ? produtos.map((x) => el("label", {},
+        el("input", { type: "checkbox", onchange: (ev) => { ev.target.checked ? escolhidos.add(x.id) : escolhidos.delete(x.id); ligar.disabled = !escolhidos.size; } }),
+        el("span", {}, x.nome, el("span", { class: "suave" }, ` · ${tamanho(x.tamanho, x.unidade)}`)))) : el("p", { class: "suave" }, "Nenhum produto com essas palavras. Tente a marca ou o tipo."));
+    } catch (e) { aviso(lista, e.message, true); }
+  };
+  return el("div", {}, el("div", { class: "busca" }, campo, el("button", { class: "botao", onclick: buscar }, "Buscar"), ligar), lista);
+}
+
+async function carregarLojas() {
+  const s = $("#lojas"); s.replaceChildren(el("p", { class: "suave" }, "Carregando…"));
+  try {
+    const lojas = await api("/v1/painel/lojas");
+    s.replaceChildren(el("p", { class: "suave" }, "Lojas que vieram do OpenStreetMap: confira se existem nesse endereço (Google Maps ou passando na frente) e confirme."),
+      lojas.length ? el("table", {}, el("thead", {}, el("tr", {}, ["Rede", "Loja", "Mapa", ""].map((h) => el("th", {}, h)))),
+        el("tbody", {}, lojas.map((l) => el("tr", {}, el("td", {}, l.rede), el("td", {}, l.nome, el("div", { class: "suave" }, [l.endereco, l.bairro].filter(Boolean).join(" · "))),
+          el("td", {}, el("a", { href: `https://www.google.com/maps/search/?api=1&query=${l.lat},${l.lon}`, target: "_blank", rel: "noopener noreferrer" }, "ver no mapa")),
+          el("td", {}, el("button", { class: "botao primario", onclick: async (ev) => {
+            try { await api(`/v1/painel/lojas/${l.id}/confirmar`, { method: "POST" }); ev.target.closest("tr").remove(); }
+            catch (e) { aviso(s, e.message, true); } } }, "Confirmar")))))) : el("p", {}, "Todas as lojas estão confirmadas."));
+  } catch (e) { s.replaceChildren(); aviso(s, e.message, true); }
+}
+
+if (token) { $("#entrar").hidden = true; $("#abas").hidden = false; mostrar("resumo"); }
+</script>
+</body>
+</html>

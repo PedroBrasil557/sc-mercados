@@ -2,6 +2,7 @@
 
 Rodar localmente:  uvicorn quantofica.api.app:create_app --factory --reload
 Variável obrigatória: DATABASE_URL (ex.: postgresql://quantofica:local-apenas@localhost:54329/quantofica)
+Opcional: PAINEL_TOKEN_SHA256 (liga o painel interno em /painel)
 """
 
 import os
@@ -11,7 +12,7 @@ from fastapi import FastAPI
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
-from . import detalhes, identidade, listas, precos, produtos, web
+from . import detalhes, identidade, listas, painel, precos, produtos, web
 from .banco import Conexao
 
 
@@ -45,5 +46,6 @@ def create_app(dsn: str | None = None) -> FastAPI:
     app.include_router(precos.router)
     app.include_router(produtos.router)
     app.include_router(detalhes.router)
+    app.include_router(painel.router)
     app.include_router(web.router)
     return app
