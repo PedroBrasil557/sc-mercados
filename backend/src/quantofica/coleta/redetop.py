@@ -55,8 +55,10 @@ from ..qualidade import monitor
 from ..qualidade.monitor import Anomalia
 from ..regras import ean as ean_util
 from ..regras import tamanho as tam
+from . import gravar
 from .casamento import palavras
 from .fort import carregar_catalogo
+from .gravar import Preco
 from .vtex import ClienteHttp
 
 API = "https://services.vipcommerce.com.br/api-admin/v1"
@@ -324,8 +326,10 @@ def _coletar(conn, http, agora: datetime, rede_id) -> dict:
     todos_eans = {r["codigo"] for r in conn.execute("select codigo from ean").fetchall()}
     historico: dict[str, list[int]] = {}
     for r in conn.execute(
-        "select produto_id, preco_centavos from observacao_preco where faixa = 'varejo' and observado_em >= %s",
-        (agora - JANELA_HISTORICO,),
+        """select produto_id, preco_centavos from preco_atual where faixa = 'varejo' and observado_em >= %s
+           union all
+           select produto_id, preco_centavos from observacao_preco where faixa = 'varejo' and observado_em >= %s""",
+        (agora - JANELA_HISTORICO, agora - JANELA_HISTORICO),
     ).fetchall():
         historico.setdefault(str(r["produto_id"]), []).append(r["preco_centavos"])
 
@@ -341,6 +345,7 @@ def _coletar(conn, http, agora: datetime, rede_id) -> dict:
         resumo["produtos_novos"] = len(criados)
 
         no_site: dict[str, ItemDoSite] = {}
+        linhas: list[Preco] = []
         for loja, itens in por_loja.items():
             for gtin, item in itens.items():
                 produto = produto_por_ean.get(gtin)
@@ -365,13 +370,12 @@ def _coletar(conn, http, agora: datetime, rede_id) -> dict:
                         )
                     )
                     continue
-                conn.execute(
-                    """insert into observacao_preco
-                         (produto_id, loja_id, preco_centavos, preco_de_centavos, faixa, fonte, observado_em, evidencia_id)
-                       values (%s, %s, %s, %s, 'varejo', 'site', %s, %s)""",
-                    (produto, loja, item.preco_centavos, item.preco_de_centavos, agora, evidencia),
+                linhas.append(
+                    Preco(produto, loja, item.preco_centavos, "varejo", "site", item.preco_de_centavos, None, evidencia)
                 )
                 resumo["precos"] += 1
+        # Só o que mudou vai para o histórico; o resto só é confirmado no preço atual.
+        resumo["mudaram"] = gravar.registrar(conn, linhas, agora)["mudaram"]
         for produto, item in no_site.items():  # nome no site: o Vigia compara o tamanho entre redes (R1)
             conn.execute(
                 """insert into produto_na_rede (produto_id, rede_id, sku, nome_no_site) values (%s, %s, %s, %s)
