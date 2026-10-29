@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Query
 from psycopg import Connection
 from pydantic import BaseModel, Field
 
+from ..coleta import cupom as cupom_fiscal
 from ..regras import economia as regra_economia
 from ..regras import totais
 from ..regras.ean import normalizar
@@ -258,14 +259,15 @@ def ofertas(membro: MembroAtual, conn: Conexao, limite: Annotated[int, Query(ge=
     seu = ctx.seu_mercado
     escolhidas = {str(lj["id"]): lj for lj in ctx.por_rede.values()}
     agora = datetime.now(UTC)
-    # Candidatas: preço "de/por" no site, preço de encarte ou preço que mudou no último mês. O resto não pode ser
-    # oferta real, e assim a conta não percorre o catálogo inteiro.
+    # Candidatas: preço "de/por" no site, preço de encarte ou preço que mudou no último mês (o primeiro preço visto
+    # não conta como mudança). O resto não pode ser oferta real, e assim a conta não percorre o catálogo inteiro.
     candidatos = [
         str(r["produto_id"])
         for r in conn.execute(
             """select distinct produto_id from preco_atual
                where loja_id = any(%s) and faixa = %s and observado_em >= %s
-                 and (preco_de_centavos > preco_centavos or fonte = 'encarte' or desde >= %s)""",
+                 and (preco_de_centavos > preco_centavos or fonte = 'encarte'
+                      or (desde >= %s and anterior_centavos is not null))""",
             (list(escolhidas), Faixa.VAREJO, agora - timedelta(days=3), agora - timedelta(days=30)),
         ).fetchall()
     ]
@@ -392,6 +394,7 @@ def ler_cupom(cupom: Cupom, membro: MembroAtual, conn: Conexao):
 
     Item com código de barras no lugar do código interno é reconhecido na hora; os outros vão para o
     agente Casador de Cupom, e a economia é calculada só com os reconhecidos (a base fica escrita).
+    O preço unitário dos reconhecidos vira o preço da loja (fonte cupom); loja sem CNPJ no cadastro vai para revisão.
     """
     chave = re.sub(r"\D", "", cupom.chave)
     if len(chave) != 44:
@@ -422,6 +425,15 @@ def ler_cupom(cupom: Cupom, membro: MembroAtual, conn: Conexao):
                     (cnpj, it.codigo[:60], it.descricao[:200]),
                 )
         economia = _economia_do_cupom(conn, membro, reconhecidos, loja["rede"] if loja else None)
+        agora = datetime.now(UTC)
+        quando = cupom_fiscal.momento(cupom.emitido_em, agora)
+        unitarios = {pid: u for pid, (q, v) in reconhecidos.items() if (u := cupom_fiscal.preco_unitario(q, v)) is not None}
+        precos_publicados = 0
+        if quando and unitarios and len(cnpj) == 14 and cnpj.isdigit():
+            if loja:
+                precos_publicados = cupom_fiscal.publicar(conn, str(loja["id"]), unitarios, quando, agora)["publicados"]
+            else:
+                cupom_fiscal.guardar_para_revisao(conn, cnpj, cupom.emitente, unitarios, quando)
         conn.execute(
             """insert into cupom_lido (casa_id, hash_chave, loja_id, data_compra, total_centavos, economia_centavos)
                values (%s, %s, %s, %s, %s, %s)""",
@@ -439,6 +451,7 @@ def ler_cupom(cupom: Cupom, membro: MembroAtual, conn: Conexao):
         "total_centavos": cupom.total_centavos,
         "itens": len(cupom.itens),
         "itens_reconhecidos": len(reconhecidos),
+        "precos_publicados": precos_publicados,
         "economia": None
         if economia is None
         else {
