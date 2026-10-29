@@ -25,6 +25,15 @@ class TestTotalJusto:
         assert c.fora_da_soma["Cooper"] == ["sal"]
         assert c.parcial == {"Giassi": False, "Angeloni": False, "Cooper": True}  # 1 de 4 > 20%
 
+    def test_loja_com_poucos_itens_fica_fora_do_total_justo(self):
+        # Fort só com 1 item do encarte não pode encolher a comparação das outras para 1 item.
+        precos = {**PRECOS, "Fort": {"cafe": 1990}}
+        assert totais.nucleo(LISTA, precos) == {"Giassi", "Angeloni", "Cooper"}
+
+    def test_nucleo_pede_mais_da_metade_dos_itens_da_melhor(self):
+        precos = {"X": {"a": 1, "b": 1, "c": 1}, "Y": {"a": 1, "b": 1}, "W": {"a": 1}, "Z": {}}
+        assert totais.nucleo({"a": 1, "b": 1, "c": 1}, precos) == {"X", "Y"}
+
     def test_empate_desempata_pela_distancia(self):
         precos = {"A": {"x": 100}, "B": {"x": 100}}
         assert totais.comparar({"x": 1}, precos, {"A": 5.0, "B": 1.0}).ordem == ["B", "A"]

@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from itertools import combinations
 
 LIMITE_PARCIAL = 0.20  # mercado sem mais de 20% dos itens: "comparação parcial"
+MINIMO_NUCLEO = 0.5  # loja com metade ou menos dos itens da melhor fica fora do total justo
 FOLGA_DIVISAO_CENTAVOS = 1000  # R8: a economia precisa superar o deslocamento + 10 reais
 
 Precos = dict[str, dict[str, int]]  # loja -> produto -> centavos
@@ -33,6 +34,17 @@ def comparar(lista: dict[str, int], precos: Precos, distancia_km: dict[str, floa
     dist = distancia_km or {}
     ordem = sorted(lojas, key=lambda loja: (totais[loja], dist.get(loja, 0.0)))
     return Comparacao(comuns, totais, fora, parcial, ordem)
+
+
+def nucleo(lista: dict[str, int], precos: Precos) -> set[str]:
+    """Lojas que entram no total justo (R7): as que têm mais da metade dos itens que a melhor tem.
+
+    Uma loja com poucos itens (só os do encarte, por exemplo) encolheria os itens comuns de todas; ela
+    aparece à parte, com o total só do que tem.
+    """
+    cobertura = {loja: sum(1 for p in lista if p in precos[loja]) for loja in precos}
+    melhor = max(cobertura.values(), default=0)
+    return {loja for loja, n in cobertura.items() if n and n > MINIMO_NUCLEO * melhor}
 
 
 @dataclass

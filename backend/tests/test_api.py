@@ -350,3 +350,29 @@ def test_exclusao_de_conta(api, banco_url, casa):
     with psycopg.connect(banco_url) as c:
         assert c.execute("select count(*) from lista where id = %s", (lista,)).fetchone()[0] == 0
         assert c.execute("select count(*) from operacao_lista where lista_id = %s", (lista,)).fetchone()[0] == 0
+
+
+def test_loja_so_com_itens_do_encarte_aparece_a_parte(api, dados, banco_url):
+    # Fort perto, com só o café no encarte: não pode encolher o total justo das outras para 1 item.
+    fort, loja = uuid4(), uuid4()
+    with psycopg.connect(banco_url) as c:
+        c.execute("insert into rede (id, nome) values (%s, 'Fort Atacadista')", (fort,))
+        c.execute(
+            "insert into loja (id, rede_id, cidade_id, nome, lat, lon) values (%s, %s, %s, 'Fort Itoupava Norte', %s, %s)",
+            (loja, fort, dados["cidade"], -26.9060, -49.0780),
+        )
+        c.execute(
+            "insert into observacao_preco (produto_id, loja_id, preco_centavos, fonte, observado_em, valido_ate) "
+            "values (%s, %s, 1590, 'encarte', %s, %s)",
+            (dados["cafe"], loja, AGORA - timedelta(hours=2), AGORA + timedelta(days=2)),
+        )
+    pedido = {"bairro_id": str(dados["bairro"]), "itens": {str(dados["arroz"]): 1, str(dados["cafe"]): 2}}
+    eu = api.post("/v1/aparelhos", json={"apelido": "Bia", "bairro_id": str(dados["bairro"])}).json()
+    r = api.post("/v1/comparar", headers=com_token(eu["token"]), json=pedido).json()
+    assert r["comuns"] == 2
+    assert "Fort Atacadista" not in [lj["rede"] for lj in r["lojas"]]
+    [poucos] = r["lojas_com_poucos_itens"]
+    assert (poucos["rede"], poucos["itens"], poucos["total_centavos"]) == ("Fort Atacadista", [str(dados["cafe"])], 2 * 1590)
+    # Os mesmos itens (o café) também na recomendada, para comparar
+    assert poucos["mesmos_itens"] == 1 and poucos["mesmos_itens_na_recomendada_centavos"] > 0
+    assert poucos["valido_ate"] is not None

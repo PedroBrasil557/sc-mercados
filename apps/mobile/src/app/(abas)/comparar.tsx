@@ -72,6 +72,7 @@ export default function Comparar() {
   const menorPrateleira = Math.min(...lojas.map((l) => l.total_centavos));
   const etiqueta = maisBarata && maisBarata.total_centavos <= menorPrateleira ? "Mais barato" : "Melhor para você";
   const maisCara = [...lojas].sort((a, b) => b.total_centavos - a.total_centavos)[0];
+  const poucos = dados.lojas_com_poucos_itens ?? [];
   const foraDaSoma = dados.itens - dados.comuns;
   const nomeDaRede = (id: string) => lojas.find((l) => l.loja_id === id)?.rede ?? "";
   const subtitulo = lojas.length
@@ -118,6 +119,33 @@ export default function Comparar() {
           }
         />
       ))}
+
+      {poucos.length ? (
+        <Text accessibilityRole="header" style={[fonte("rotulo"), { color: cor.textoSuave, paddingTop: 8 }]}>
+          Só alguns itens da sua lista
+        </Text>
+      ) : null}
+      {poucos.map((l) => {
+        const n = l.itens.length;
+        const economia = l.mesmos_itens_na_recomendada_centavos - l.mesmos_itens_aqui_centavos;
+        const validade = l.valido_ate
+          ? `Encarte até ${new Date(l.valido_ate).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}. `
+          : "";
+        const comparado =
+          l.mesmos_itens && maisBarata && economia !== 0
+            ? `${l.mesmos_itens === n ? "Esses itens" : `${l.mesmos_itens} desses itens`} saem ${reais(Math.abs(economia))} ${economia > 0 ? "a menos" : "a mais"} que no ${maisBarata.rede}.`
+            : "";
+        return (
+          <LinhaDeMercado
+            key={l.loja_id}
+            rede={l.rede}
+            detalhe={`${n} ${n === 1 ? "item" : "itens"} · ${l.bairro ?? l.nome} · ${km(l.distancia_km)}`}
+            total={reais(l.total_centavos)}
+            nota={`${validade}${comparado}`.trim() || null}
+            aoTocar={() => setRedeAberta({ rede: l.rede, loja: l.loja_id })}
+          />
+        );
+      })}
 
       {dados.redes_sem_preco.slice(0, 2).map((r) => (
         <View key={r.rede} style={[estilos.emBreve, { borderColor: cor.bordaPadrao }]}>

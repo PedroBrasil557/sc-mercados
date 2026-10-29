@@ -102,11 +102,26 @@ export type LojaComparada = {
   preco_mais_antigo_em: string | null;
   algum_preco_pode_ter_mudado: boolean;
 };
+/** Loja com poucos itens da lista (ex.: Fort, só o encarte): fica fora do total justo e aparece à parte. */
+export type LojaComPoucosItens = {
+  loja_id: string;
+  rede: string;
+  nome: string;
+  bairro: string | null;
+  distancia_km: number;
+  itens: string[];
+  total_centavos: number;
+  mesmos_itens: number; // quantos destes a loja recomendada também vende
+  mesmos_itens_aqui_centavos: number;
+  mesmos_itens_na_recomendada_centavos: number;
+  valido_ate: string | null; // validade do encarte
+};
 export type Comparacao = {
   comuns: number;
   itens: number;
   redes_sem_preco: { rede: string; distancia_km: number }[];
   lojas: LojaComparada[];
+  lojas_com_poucos_itens?: LojaComPoucosItens[]; // opcional: comparação guardada antes desta versão
   divisao: null | {
     lojas: [string, string];
     total_centavos: number;
