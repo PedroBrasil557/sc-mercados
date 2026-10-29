@@ -4,7 +4,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-nati
 
 import { api, type Comparacao, type LojaDaRede } from "@/api/cliente";
 import { diferenca, km, reais } from "@/formatar";
-import { escolherLoja } from "@/lista/comparacao";
+import { custoKm, escolherLoja } from "@/lista/comparacao";
 import { type ItemVisivel } from "@/lista/sincronia";
 import { fonte, useTema } from "@/tema";
 
@@ -12,7 +12,6 @@ import { Botao } from "./Botao";
 import { Icone } from "./Icone";
 import { PainelInferior } from "./PainelInferior";
 
-const CUSTO_KM_CENTAVOS = 90; // R8: o mesmo padrão da API
 const FOLGA_CENTAVOS = 1000; // R8: precisa sobrar 10 reais além do deslocamento
 
 export function PainelForaDaSoma({ visivel, aoFechar, comparacao, itens }: { visivel: boolean; aoFechar: () => void; comparacao: Comparacao; itens: ItemVisivel[] }) {
@@ -80,7 +79,7 @@ export function PainelOutrasLojas({ rede, lojaAtual, aoFechar, quantidades }: Pr
     if (!atual || !alternativa) return null;
     const economia = atual.total_centavos - alternativa.total_centavos;
     const kmExtra = Math.max(0, alternativa.distancia_km - atual.distancia_km);
-    const compensa = economia > Math.round(kmExtra * 2 * CUSTO_KM_CENTAVOS) + FOLGA_CENTAVOS;
+    const compensa = economia > Math.round(kmExtra * 2 * custoKm()) + FOLGA_CENTAVOS; // R8: o custo que a casa escolheu
     const nome = alternativa.bairro ?? alternativa.nome;
     return kmExtra > 0
       ? `A ${nome} economiza ${reais(economia)}, mas fica ${km(kmExtra)} mais longe. ${compensa ? "Compensa." : "Não compensa."}`
