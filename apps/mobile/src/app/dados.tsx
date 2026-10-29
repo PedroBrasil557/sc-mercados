@@ -2,9 +2,10 @@
 import Constants from "expo-constants";
 import { router } from "expo-router";
 import { type ReactNode, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { API } from "@/api/cliente";
 import { Botao } from "@/componentes/Botao";
 import { Icone } from "@/componentes/Icone";
 import { apagarMinhaConta } from "@/lista/sincronia";
@@ -57,14 +58,23 @@ export default function Dados() {
         sem internet.
       </Bloco>
       <Bloco titulo="De onde vêm os preços">
-        Dos sites das próprias redes (Giassi, Cooper, Angeloni, Sam’s Club), conferidos todo dia. Cada preço mostra de onde veio e quando.
-        Não recebemos dinheiro de nenhum mercado.
+        Dos sites das próprias redes (Giassi, Cooper, Angeloni, Sam’s Club), conferidos todo dia, e dos encartes do Fort Atacadista.
+        Cada preço mostra de onde veio e quando. Não recebemos dinheiro de nenhum mercado.
       </Bloco>
       <Bloco titulo="Sobre as imagens">
         Os produtos aparecem sem foto porque as fotos têm dono: só vamos usar imagens com licença. Por enquanto, cada produto mostra a
         categoria e o tamanho.
       </Bloco>
       <Bloco titulo="Mapas e bairros">© colaboradores do OpenStreetMap (licença ODbL), para os bairros e as lojas sem site.</Bloco>
+
+      <View style={estilos.links}>
+        <Text accessibilityRole="link" onPress={() => Linking.openURL(`${API}/privacidade`)} style={[fonte("corpoForte"), { color: cor.estadoEconomia }]}>
+          Política de privacidade
+        </Text>
+        <Text accessibilityRole="link" onPress={() => Linking.openURL(`${API}/termos`)} style={[fonte("corpoForte"), { color: cor.estadoEconomia }]}>
+          Termos de uso
+        </Text>
+      </View>
 
       <View style={{ gap: 8, marginTop: 8 }}>
         <Botao rotulo="Apagar meus dados" tipo="contorno" largo ocupado={apagando} aoTocar={confirmarExclusao} />
@@ -87,6 +97,7 @@ function Bloco({ titulo, children }: { titulo: string; children: ReactNode }) {
 }
 
 const estilos = StyleSheet.create({
+  links: { flexDirection: "row", gap: 20, flexWrap: "wrap" },
   conteudo: { paddingHorizontal: 20, gap: 20 },
   voltar: { width: 44, height: 44, alignItems: "center", justifyContent: "center", marginLeft: -10 },
   bloco: { gap: 4 },
