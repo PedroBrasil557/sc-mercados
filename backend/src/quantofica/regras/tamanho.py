@@ -57,6 +57,22 @@ def todos(nome: str) -> list[Tamanho]:
     return saida
 
 
+def mesmo_tamanho_no_site(nome_no_site: str, quantidade, unidade: str | None) -> bool:
+    """O nome no site da rede é do mesmo produto do catálogo? (R1: o mesmo código de barras às vezes é usado
+    para outra embalagem: o display com 20 chocolates, a embalagem que mudou de 150 g para 200 g.)
+
+    Falso com pacote de vários ou quando nenhum tamanho do nome bate com o do produto (2% de folga).
+    Sem tamanho legível no nome, aceita: não há prova de que é outro.
+    """
+    if embalagem_multipla(nome_no_site):
+        return False
+    if quantidade is None or unidade is None:
+        return True
+    alvo = Tamanho(float(quantidade), unidade)
+    mesma_unidade = [t for t in todos(nome_no_site) if t.unidade == unidade]
+    return not mesma_unidade or any(t.mesmo_que(alvo, 0.02) for t in mesma_unidade)
+
+
 def embalagem_multipla(nome: str) -> bool:
     """Pack, kit, fardo, "leve X pague Y", "N x 500 g" ou "N unidades de 120 g cada".
 

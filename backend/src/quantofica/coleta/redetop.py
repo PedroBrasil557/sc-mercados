@@ -151,22 +151,7 @@ def produtos_do_cd(http, s: Sessao, cd: int) -> Iterator[dict]:
             pagina += 1
 
 
-def gtin_valido(codigo: str | None) -> str | None:
-    """GTIN-14 de um código de barras de verdade, ou None.
-
-    Fora: código interno da loja (curto: "93" passaria no dígito verificador), faixas de uso restrito do GS1
-    (02x, 04x e 2xx no EAN-13: peso variável e numeração interna, o mesmo número é outro produto em outra
-    rede) e dígito verificador errado.
-    """
-    digitos = re.sub(r"\D", "", codigo or "")
-    if len(digitos) not in (8, 12, 13, 14):
-        return None
-    gtin = ean_util.normalizar(digitos)
-    if not ean_util.digito_verificador_ok(gtin):
-        return None
-    if len(digitos) != 8 and gtin[0] == "0" and (gtin[1] == "2" or gtin[1:3] in ("02", "04")):
-        return None
-    return gtin
+gtin_valido = ean_util.gtin_de_produto
 
 
 def _centavos(valor) -> int | None:
@@ -346,6 +331,10 @@ def _coletar(conn, http, agora: datetime, rede_id) -> dict:
 
         no_site: dict[str, ItemDoSite] = {}
         linhas: list[Preco] = []
+        tamanhos = {
+            str(r["id"]): (r["tamanho"], r["unidade"])
+            for r in conn.execute("select id, tamanho, unidade from produto where tamanho is not null").fetchall()
+        }
         for loja, itens in por_loja.items():
             for gtin, item in itens.items():
                 produto = produto_por_ean.get(gtin)
@@ -353,6 +342,9 @@ def _coletar(conn, http, agora: datetime, rede_id) -> dict:
                     continue
                 if tam.embalagem_multipla(item.nome):  # o EAN da unidade num pack: R1, revisão decide
                     revisar.append(("ean", Anomalia(f"redetop:{gtin}", f"embalagem múltipla no site: {item.nome!r}"), None))
+                    continue
+                if not tam.mesmo_tamanho_no_site(item.nome, *tamanhos.get(produto, (None, None))):
+                    resumo["fora_tamanho_diferente"] += 1  # mesmo código, outra embalagem: não mistura (R1)
                     continue
                 no_site.setdefault(produto, item)
                 evidencia = f"vipcommerce:redetop:{item.id_no_site}"

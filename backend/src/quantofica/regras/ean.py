@@ -26,6 +26,24 @@ def digito_verificador_ok(codigo: str) -> bool:
     return (10 - soma % 10) % 10 == dv
 
 
+def gtin_de_produto(codigo: str | None) -> str | None:
+    """GTIN-14 de um código de barras de verdade, ou None.
+
+    Fora: código interno da loja (curto: "93" passaria no dígito verificador), faixas de uso restrito do GS1
+    (02x, 04x e 2xx no EAN-13: peso variável e numeração interna, o mesmo número é outro produto em outra
+    rede) e dígito verificador errado.
+    """
+    digitos = re.sub(r"\D", "", codigo or "")
+    if len(digitos) not in (8, 12, 13, 14):
+        return None
+    gtin = normalizar(digitos)
+    if not digito_verificador_ok(gtin):
+        return None
+    if len(digitos) != 8 and gtin[0] == "0" and (gtin[1] == "2" or gtin[1:3] in ("02", "04")):
+        return None
+    return gtin
+
+
 def mesmo_codigo(a: str, b: str) -> bool:
     try:
         return normalizar(a) == normalizar(b)

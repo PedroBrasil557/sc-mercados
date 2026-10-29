@@ -168,3 +168,29 @@ def test_grava_produto_novo_liga_sku_e_marca_ausente(banco_url):
         c.execute("delete from ean_ausente")
         catalogador.gravar(c, Rede("giassi", "www.giassi.com.br", "89010000"), Varredura([], False, 1, []), agora)
         assert c.execute("select count(*) as n from ean_ausente").fetchone()["n"] == 0
+
+
+def test_mesmo_codigo_com_outra_embalagem_nao_liga_a_rede(banco_url):
+    agora = datetime(2026, 10, 30, 5, tzinfo=UTC)
+    snickers = uuid4()
+    with psycopg.connect(banco_url, autocommit=True, row_factory=dict_row) as c:
+        c.execute("insert into rede (nome) values ('Cooper') on conflict do nothing")
+        c.execute(
+            "insert into produto (id, categoria_id, nome_humano, tamanho, unidade) values (%s, 'graos', 'Snickers 40g', 40, 'g')",
+            (snickers,),
+        )
+        c.execute("insert into ean (codigo, produto_id) values ('07896423419115', %s)", (snickers,))
+        display = ItemDoSite(
+            "cooper", "77", "07896423419115", "Snickers Display 800g (20 Unidades de 40g)", None, "/Doces/", False, True
+        )
+        r = catalogador.gravar(c, Rede("cooper", "www.minhacooper.com.br", "89010000"), Varredura([display], True, 1, []), agora)
+        assert r["descartes"] == {"tamanho_diferente": 1} and r["ligados"] == 0
+        assert c.execute("select count(*) as n from produto_na_rede where sku = '77'").fetchone()["n"] == 0
+        # A coleta diária não procura esse código na Cooper: para ela, a Cooper não vende o Snickers de 40 g.
+        assert (
+            c.execute(
+                "select count(*) as n from ean_ausente a join rede r on r.id = a.rede_id "
+                "where r.nome = 'Cooper' and a.codigo = '07896423419115'"
+            ).fetchone()["n"]
+            == 1
+        )
