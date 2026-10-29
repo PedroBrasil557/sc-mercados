@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Query
 from psycopg import Connection
 from pydantic import BaseModel, Field, field_validator
 
+from ..regras import nome as regra_nome
 from ..regras.lista import Operacao, Tipo, aplicar
 from .banco import Conexao
 from .identidade import Membro, MembroAtual
@@ -26,6 +27,7 @@ class OperacaoEntrada(BaseModel):
     valor: Decimal | None = Field(default=None, gt=0, max_digits=10, decimal_places=3)
     produto_id: UUID | None = None  # só em "criar"
     categoria_id: str | None = None  # item genérico (R3)
+    qualquer_marca: bool = False  # só em "criar": cada mercado entra com o equivalente mais barato
 
     @field_validator("feita_em")
     @classmethod
@@ -67,9 +69,9 @@ def receber(lista_id: UUID, lote: LoteOperacoes, membro: MembroAtual, conn: Cone
         for op in lote.operacoes:
             if op.tipo == "criar" and (op.produto_id or op.categoria_id):
                 conn.execute(
-                    """insert into item_lista (id, lista_id, produto_id, categoria_id, quantidade, adicionado_por)
-                       values (%s, %s, %s, %s, %s, %s) on conflict (id) do nothing""",
-                    (op.item_id, lista_id, op.produto_id, op.categoria_id, op.valor or 1, membro.id),
+                    """insert into item_lista (id, lista_id, produto_id, categoria_id, quantidade, adicionado_por, qualquer_marca)
+                       values (%s, %s, %s, %s, %s, %s, %s) on conflict (id) do nothing""",
+                    (op.item_id, lista_id, op.produto_id, op.categoria_id, op.valor or 1, membro.id, op.qualquer_marca),
                 )
             cur = conn.execute(
                 """insert into operacao_lista (id, lista_id, item_id, membro_id, tipo, valor, feita_em)
@@ -132,7 +134,8 @@ def estado_da_lista(conn: Connection, lista_id: UUID) -> dict:
     detalhes = {
         str(r["id"]): r
         for r in conn.execute(
-            """select i.id, i.categoria_id, i.marca_fixa, p.id as produto_id, p.nome_humano, p.marca, p.tamanho, p.unidade,
+            """select i.id, i.categoria_id, i.marca_fixa, i.qualquer_marca,
+                      p.id as produto_id, p.nome_humano, p.marca, p.tamanho, p.unidade,
                       coalesce(p.categoria_id, i.categoria_id) as categoria
                from item_lista i left join produto p on p.id = i.produto_id where i.lista_id = %s""",
             (lista_id,),
@@ -152,6 +155,8 @@ def estado_da_lista(conn: Connection, lista_id: UUID) -> dict:
                 "adicionado_por": nomes.get(it.adicionado_por) if it.adicionado_por else None,
                 "produto_id": d.get("produto_id"),
                 "nome": d.get("nome_humano"),
+                "nome_curto": regra_nome.nome_curto(d["nome_humano"], d.get("marca")) if d.get("nome_humano") else None,
+                "qualquer_marca": bool(d.get("qualquer_marca")),
                 "marca": d.get("marca"),
                 "tamanho": d.get("tamanho"),
                 "unidade": d.get("unidade"),

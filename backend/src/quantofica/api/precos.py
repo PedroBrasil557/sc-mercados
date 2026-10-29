@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, model_validator
 from ..regras import totais
 from ..regras.preco import Estado, Faixa, Fonte, Observacao, PrecoExibido, preco_atual
 from .banco import Conexao
+from .catalogo import catalogo
 from .identidade import MembroAtual
 from .listas import estado_da_lista, lista_da_casa
 
@@ -76,6 +77,8 @@ class PedidoComparacao(BaseModel):
     custo_km_centavos: int = Field(default=CUSTO_KM_PADRAO_CENTAVOS, ge=0, le=1000)
     # Loja escolhida pela casa numa rede (tela "Outras lojas da rede"); nas outras redes vale a mais perto (R13).
     preferidas: list[UUID] = Field(default_factory=list, max_length=20)
+    # Itens "qualquer marca": cada mercado entra com o equivalente mais barato do mesmo grupo.
+    qualquer_marca: list[UUID] = Field(default_factory=list, max_length=300)
 
     @model_validator(mode="after")
     def lista_ou_itens(self):
@@ -105,13 +108,12 @@ def comparar(pedido: PedidoComparacao, membro: MembroAtual, conn: Conexao):
         raise HTTPException(404, "bairro não encontrado")
     if pedido.lista_id:
         lista_da_casa(conn, pedido.lista_id, membro)
-        itens = {
-            str(i["produto_id"]): Decimal(i["quantidade"])
-            for i in estado_da_lista(conn, pedido.lista_id)["itens"]
-            if i["produto_id"]
-        }
+        da_lista = [i for i in estado_da_lista(conn, pedido.lista_id)["itens"] if i["produto_id"] and not i["comprado"]]
+        itens = {str(i["produto_id"]): Decimal(i["quantidade"]) for i in da_lista}
+        genericos = {str(i["produto_id"]) for i in da_lista if i.get("qualquer_marca")}
     else:
         itens = {str(k): v for k, v in pedido.itens.items()}
+        genericos = {str(p) for p in pedido.qualquer_marca}
     if not itens:
         return {"lojas": [], "comuns": 0, "itens": 0, "divisao": None, "redes_sem_preco": [], "lojas_com_poucos_itens": []}
 
@@ -129,12 +131,40 @@ def comparar(pedido: PedidoComparacao, membro: MembroAtual, conn: Conexao):
         if atual is None or dist[str(lj["id"])] < dist[str(atual["id"])]:
             mais_proxima[lj["rede"]] = lj
     preferidas = {str(p) for p in pedido.preferidas}
+    # O seu mercado da casa representa a rede dele e é a base da recomendação.
+    config = conn.execute("select config from casa where id = %s", (membro.casa_id,)).fetchone()["config"] or {}
+    seu_id = config.get("meu_mercado")
+    if seu_id:
+        preferidas.add(seu_id)
     for lj in lojas:
         if str(lj["id"]) in preferidas:
             mais_proxima[lj["rede"]] = lj
     escolhidas = {str(lj["id"]): lj for lj in mais_proxima.values()}
 
-    atuais = precos_atuais(conn, list(escolhidas), list(itens), datetime.now(UTC))
+    # Qualquer marca: os produtos do mesmo grupo também entram na consulta de preço.
+    cat = catalogo(conn)
+    membros = {}
+    for p in genericos & set(itens):
+        g = cat["produtos"].get(p, {}).get("grupo")
+        membros[p] = cat["grupos"].get(g, [p]) if g else [p]
+    consulta = set(itens) | {m for ms in membros.values() for m in ms}
+    brutos = precos_atuais(conn, list(escolhidas), list(consulta), datetime.now(UTC))
+    atuais: dict[str, dict] = {}
+    escolhas: dict[str, list] = {}
+    for loja, por in brutos.items():
+        atuais[loja] = {}
+        for p in itens:
+            if p in membros:
+                opcoes = [(m, por[m]) for m in membros[p] if m in por]
+                if opcoes:
+                    m, ex = min(opcoes, key=lambda x: x[1].observacao.preco_centavos)
+                    atuais[loja][p] = ex
+                    d = cat["produtos"].get(m, {})
+                    escolhas.setdefault(loja, []).append(
+                        {"item": p, "produto_id": m, "marca": d.get("marca"), "nome": d.get("nome")}
+                    )
+            elif p in por:
+                atuais[loja][p] = por[p]
     # Loja sem nenhum preço desta lista fica de fora: senão zeraria os itens comuns de todas (R7).
     escolhidas = {k: v for k, v in escolhidas.items() if atuais.get(k)}
     # Redes perto de você que ainda não têm preço desta lista (cartão "Em breve" na tela Comparar).
@@ -170,7 +200,7 @@ def comparar(pedido: PedidoComparacao, membro: MembroAtual, conn: Conexao):
 
     # Melhor loja para a casa: a mais perto, a não ser que outra pague a viagem a mais e sobre 10 reais (R8).
     rec = totais.recomendar(
-        {k: _centavos(v) for k, v in comp.totais.items()}, {k: dist[k] for k in escolhidas}, pedido.custo_km_centavos
+        {k: _centavos(v) for k, v in comp.totais.items()}, {k: dist[k] for k in escolhidas}, pedido.custo_km_centavos, seu_id
     )
     viagem = {k: totais.custo_deslocamento_centavos(dist[k], pedido.custo_km_centavos) for k in escolhidas}
 
@@ -201,6 +231,9 @@ def comparar(pedido: PedidoComparacao, membro: MembroAtual, conn: Conexao):
             "recomendada": rec is not None and loja_id == rec.loja,
             "nota": nota(loja_id),
             "total_centavos": _centavos(comp.totais[loja_id]),
+            "total_com_viagem_centavos": _centavos(comp.totais[loja_id]) + viagem[loja_id],
+            "seu_mercado": loja_id == seu_id,
+            "escolhas": escolhas.get(loja_id, []),  # qualquer marca: que marca pegar nesta loja
             "fora_da_soma": comp.fora_da_soma[loja_id],
             "comparacao_parcial": comp.parcial[loja_id],
             "preco_mais_antigo_em": min((p.observacao.observado_em for p in precos_usados), default=None),

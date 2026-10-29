@@ -83,7 +83,9 @@ class Recomendacao:
     economia_na_prateleira_centavos: int  # da recomendada frente à mais perto (0 se for a mesma)
 
 
-def recomendar(totais: dict[str, int], distancia_km: dict[str, float], custo_km_centavos: int) -> Recomendacao | None:
+def recomendar(
+    totais: dict[str, int], distancia_km: dict[str, float], custo_km_centavos: int, base: str | None = None
+) -> Recomendacao | None:
     """A melhor loja para a casa (R8 aplicada a uma loja só): a mais perto, a menos que outra economize
     mais do que a ida e volta a mais custa, com a folga de 10 reais.
 
@@ -92,7 +94,8 @@ def recomendar(totais: dict[str, int], distancia_km: dict[str, float], custo_km_
     """
     if not totais:
         return None
-    perto = min(totais, key=lambda loja: (distancia_km.get(loja, 0.0), totais[loja]))
+    # A base é o seu mercado (onde a casa já compra); sem ele, a loja mais perto.
+    perto = base if base in totais else min(totais, key=lambda loja: (distancia_km.get(loja, 0.0), totais[loja]))
     melhor, ganho_melhor = perto, 0
     for loja, total in totais.items():
         economia = totais[perto] - total

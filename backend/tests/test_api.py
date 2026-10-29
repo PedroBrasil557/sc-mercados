@@ -245,7 +245,12 @@ def test_detalhe_do_produto_mostra_o_preco_em_cada_loja(api, dados, casa):
     assert r["produto"]["nome"] == "Arroz tipo 1"
     assert [p["preco_centavos"] for p in r["precos"]] == [1000, 2490, 2590]  # todas as lojas, do mais barato
     assert r["precos"][0]["nome"] == "Cooper Garcia"
-    assert [h["preco_centavos"] for h in r["historico"]] == [1000]  # um dia de coleta na loja mais barata
+    # O seu mercado (sem escolha: o mais perto com preço do site) vem primeiro, com o histórico dele
+    assert (r["seu_mercado"]["nome"], r["seu_mercado"]["preco_centavos"]) == ("Giassi Victor Konder", 2590)
+    assert [h["preco_centavos"] for h in r["historico"]] == [2590]
+    # A Cooper aparece uma vez só (pela loja mais barata dela) e o veredito diz se vale ir até lá
+    assert [linha["rede"] for linha in r["por_rede"]].count("Cooper") == 1
+    assert r["veredito"]["rede"] == "Cooper" and r["veredito"]["economia_centavos"] == 2590 - 1000
 
 
 def test_outras_lojas_da_rede(api, dados, casa):
