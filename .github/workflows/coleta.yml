@@ -19,7 +19,7 @@ jobs:
   coletar:
     if: vars.COLETA_ATIVA == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 180  # a primeira rodada com o catálogo novo procura ~700 produtos em cada rede
     defaults:
       run:
         working-directory: backend

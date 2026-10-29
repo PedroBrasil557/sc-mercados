@@ -194,3 +194,20 @@ class TestClienteHttp:
         assert dormiu and dormiu[0] > 0  # esperou entre o robots.txt e a chamada
         with pytest.raises(vtex.BloqueadoPeloRobots):
             c("https://loja.test/proibido/x")
+
+
+class TestCache:
+    def test_produto_conhecido_nao_e_procurado_e_ausente_e_anotado(self):
+        http = FakeHttp(
+            {
+                "regions": [{"id": "v2.x", "sellers": [{"id": "giassi09", "name": "giassi09"}]}],
+                "simulation": simulacao({"10": {"availability": "available", "sellingPrice": 2590}}),
+                "products/search": [],
+            }
+        )
+        ausentes: list[str] = []
+        rede = vtex.Rede("giassi", "www.giassi.com.br", "89010000")
+        precos = vtex.coletar(http, rede, ["7896084700119", "7890000000017"], {"07896084700119": ("10", "Arroz")}, ausentes)
+        assert [(p.ean, p.preco_centavos) for p in precos] == [("07896084700119", 2590)]
+        assert ausentes == ["07890000000017"]
+        assert not any("7896084700119" in u for u in http.chamadas)  # o conhecido não foi buscado

@@ -100,7 +100,8 @@ class ClienteHttp:
 def _variantes(codigo: str) -> list[str]:
     g = ean_util.normalizar(codigo)
     curto = g.lstrip("0")
-    return list(dict.fromkeys([curto, curto.zfill(13), g, curto.zfill(15)]))
+    # Na prática as redes guardam o EAN curto ou com 13 dígitos; testar 14 e 15 dobrava as requisições.
+    return list(dict.fromkeys([curto, curto.zfill(13)]))
 
 
 def sellers(http: Http, rede: Rede) -> dict[str, str]:
@@ -157,15 +158,34 @@ def simular(http: Http, rede: Rede, skus: list[str], ids_sellers: list[str]) -> 
     return out
 
 
-def coletar(http: Http, rede: Rede, eans: list[str]) -> list[PrecoColetado]:
+def coletar(
+    http: Http,
+    rede: Rede,
+    eans: list[str],
+    conhecidos: dict[str, tuple[str, str]] | None = None,
+    nao_encontrados: list[str] | None = None,
+) -> list[PrecoColetado]:
+    """Preço de cada EAN em cada loja da rede.
+
+    `conhecidos` (GTIN -> (sku, nome no site)) pula a busca do produto; `nao_encontrados` recebe os GTINs
+    que a rede não vende, para a coleta não procurar de novo todo dia.
+    """
     lojas = sellers(http, rede)
     if not lojas:
         return []
+    conhecidos = conhecidos or {}
     achados = {}
     for e in eans:
+        gtin = ean_util.normalizar(e)
+        if gtin in conhecidos:
+            sku, nome = conhecidos[gtin]
+            achados[gtin] = (sku, nome, None, None)
+            continue
         r = achar_sku(http, rede, e)
         if r:
-            achados[ean_util.normalizar(e)] = r
+            achados[gtin] = r
+        elif nao_encontrados is not None:
+            nao_encontrados.append(gtin)
     sim = simular(http, rede, [a[0] for a in achados.values()], list(lojas))
     saida = []
     for gtin, (sku, nome, p_cat, p_de_cat) in achados.items():
