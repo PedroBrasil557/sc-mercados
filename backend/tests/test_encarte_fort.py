@@ -101,6 +101,15 @@ class TestCasamento:
         ]
         assert {c.chave for c in casamento.casar("Chocolate Lacta 145g Sabores", lacta)} == {"branco", "leite"}
 
+    def test_linha_especial_so_quando_o_encarte_diz(self):
+        divine = [
+            cand("cremoso", "Chocolate em Barra Mais Cremoso ao Leite Divine Pacote 70g", "Divine", 70),
+            cand("zero", "Chocolate em Barra Zero 37% Cacau Divine 70g", "Divine", 70),
+            cand("gluten", "Chocolate em Barra sem Glúten Branco 30% Cacau Divine 70g", "Divine", 70),
+        ]
+        assert [c.chave for c in casamento.casar("Chocolate em Barra Divine 70g Sabores", divine)] == ["cremoso"]
+        assert [c.chave for c in casamento.casar("Chocolate em Barra Divine Zero 70g Sabores", divine)] == ["zero"]
+
     def test_dois_empatados_sem_o_encarte_dizer_que_vale_para_varios_nao_casa(self):
         dois = [
             cand("a", "Biscoito Recheado Chocolate Zezé 300g", "Zezé", 300),

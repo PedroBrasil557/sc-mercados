@@ -5,6 +5,7 @@ Moído Tradicional Odebrecht Vácuo 500g". Para casar, tudo tem de bater:
 - tamanho exato (R2) e a mesma quantidade de unidades no pacote ("c/ 4 un.");
 - a marca do produto aparece no nome do encarte;
 - o tipo (primeira palavra: café, arroz, biscoito...) aparece no nome do encarte;
+- linha especial (zero, diet, sem glúten...) só se o encarte disser;
 - o resto do nome: 3/4 das palavras do encarte estão no produto. Quando o encarte vale para vários
   ("Sabores", "Tipos", "Tradicional/ Extraforte"), basta metade, e todos os que passam levam o preço.
 Sem certeza (dois produtos empatados sem o encarte dizer que vale para vários), não casa: vai para revisão.
@@ -33,6 +34,8 @@ EMBALAGEM = {
     "pague", "refil", "squeeze", "bandeja", "tetra", "pak", "cong", "congelado", "congelada",
 }  # fmt: skip
 VARIOS = {"sabores", "tipos", "sortidos", "sortido", "fragrancias", "cores", "versoes"}
+# Linha especial costuma ter outro preço: "Divine 70g Sabores" não inclui o Divine Zero nem o sem glúten.
+DIFERENCIAIS = {"zero", "diet", "light", "gluten", "lactose", "integral", "organico", "vegano", "proteico", "kids"}
 _NUMERO = re.compile(r"^\d+([.,]\d+)?[a-z]*$")
 _POR_PACOTE = re.compile(r"c/\s*(\d+)\s*un", re.I)
 _UNIDADES_NO_NOME = re.compile(r"(\d+)\s*(?:unidades|un\b|rolos)", re.I)
@@ -77,6 +80,8 @@ def casar(nome_encarte: str, candidatos: list[Candidato]) -> list[Candidato]:
         if no_pacote and (not unidades_c or int(unidades_c.group(1)) != no_pacote):
             continue
         if not no_pacote and tam.embalagem_multipla(c.nome):
+            continue
+        if DIFERENCIAIS & set(nome_c) != DIFERENCIAIS & texto:
             continue
         procuradas = _distintas(nome_encarte, marca)
         achadas = len(procuradas & set(nome_c)) / len(procuradas) if procuradas else 1.0
