@@ -59,6 +59,16 @@ class TestTamanho:
             ("Kit Kat Pack com 3 Unidades 41,5g Cada", True),
             ("Leite Condensado Moça 3 x 395g", True),
             ("Kit de Panelas", True),
+            # Coleta de 29/10/2026: "com N unidades" é o próprio produto; pacote de vários diz o tamanho de cada
+            ("Ovos Vermelhos MANTIQUEIRA com 30 unidades", False),
+            ("Filtro de Café em Papel Melitta Original 103 com 30 Unidades", False),
+            ("Fralda Descartável MILI Love & Care Premium Mega Pacote XXG com 40 Unidades", False),
+            ("Hambúrguer de Carne Bovina Tradicional Sadia Caixa 672g com 12 Unidades", False),
+            ("Atum Sólido em Óleo Gomes da Costa Pack com 3 Unidades 120g Cada", True),
+            ("Toddynho Caixa 27 unidades 200ml cada", True),
+            ("Pão de Forma 6 unidades de 50g", True),
+            ("Leite UHT Desnatado Tirol Caixa com Tampa 12x1L", True),
+            ("Escova Dental COLGATE Classic Clean Média Leve 3 Pague 2 Unidades", True),
         ],
     )
     def test_embalagem_multipla(self, nome, esperado):

@@ -170,17 +170,48 @@ def _procurar_nos_sites(conn, http, catalogo: Catalogo, nome: str) -> list[str]:
     return []
 
 
-def rodar(conn, http, agora: datetime, ler=encarte_pdf.ler) -> dict:
-    rede = conn.execute("select id from rede where nome = %s", (REDE,)).fetchone()
-    if rede is None:
-        raise RuntimeError(f"rede {REDE!r} não está cadastrada")
-    rede_id = rede["id"]
-    lojas = [
+def nome_normalizado(nome: str) -> str:
+    return " ".join(palavras(nome))
+
+
+def lojas_da_cidade(conn, rede_id) -> list[str]:
+    return [
         str(r["id"])
         for r in conn.execute(
             "select l.id from loja l join cidade c on c.id = l.cidade_id where l.rede_id = %s and c.nome = %s", (rede_id, CIDADE)
         ).fetchall()
     ]
+
+
+def gravar_precos(conn, produto, lojas, preco_centavos, condicional_centavos, agora, valido_ate, evidencia, gravados=None) -> int:
+    """Preço normal (varejo) e condicional (Clube Mais ou cartão da loja, fora do total: R5) em cada loja."""
+    gravados = set() if gravados is None else gravados
+    faixas = [("varejo", preco_centavos)] + ([("clube", condicional_centavos)] if condicional_centavos else [])
+    n = 0
+    for faixa, centavos in faixas:
+        if (str(produto), faixa) in gravados:
+            continue
+        gravados.add((str(produto), faixa))
+        for loja in lojas:
+            conn.execute(
+                """insert into observacao_preco
+                     (produto_id, loja_id, preco_centavos, faixa, fonte, observado_em, valido_ate, evidencia_id)
+                   values (%s, %s, %s, %s, 'encarte', %s, %s, %s)""",
+                (produto, loja, centavos, faixa, agora, valido_ate, evidencia),
+            )
+            n += 1
+    return n
+
+
+def rodar(conn, http, agora: datetime, ler=encarte_pdf.ler) -> dict:
+    rede = conn.execute("select id from rede where nome = %s", (REDE,)).fetchone()
+    if rede is None:
+        raise RuntimeError(f"rede {REDE!r} não está cadastrada")
+    rede_id = rede["id"]
+    lojas = lojas_da_cidade(conn, rede_id)
+    ligados: dict[str, list[str]] = {}
+    for r in conn.execute("select nome, produto_id from nome_no_encarte where rede_id = %s", (rede_id,)).fetchall():
+        ligados.setdefault(r["nome"], []).append(str(r["produto_id"]))
     lidos = {
         r["encarte_id"] for r in conn.execute("select encarte_id from encarte_lido where rede_id = %s", (rede_id,)).fetchall()
     }
@@ -214,7 +245,10 @@ def rodar(conn, http, agora: datetime, ler=encarte_pdf.ler) -> dict:
                 for item in enc.itens:
                     if item.por_kg:  # preço por quilo depende da pesagem (R4)
                         continue
-                    produtos = [c.chave for c in casar(item.nome, catalogo.candidatos)]
+                    # Nome já ligado no painel vale primeiro; depois o catálogo; depois a busca nos sites.
+                    produtos = ligados.get(nome_normalizado(item.nome)) or [
+                        c.chave for c in casar(item.nome, catalogo.candidatos)
+                    ]
                     if not produtos:
                         produtos = _procurar_nos_sites(conn, http, catalogo, item.nome)
                         resumo["produtos_novos"] += len(produtos)
@@ -223,6 +257,8 @@ def rodar(conn, http, agora: datetime, ler=encarte_pdf.ler) -> dict:
                         "preco_centavos": item.preco_centavos,
                         "condicional_centavos": item.condicional_centavos,
                         "encarte": e["title"],
+                        "encarte_id": e["id"],
+                        "valido_ate": fim.isoformat(),
                         "pagina": item.pagina,
                     }
                     if not produtos:
@@ -236,22 +272,10 @@ def rodar(conn, http, agora: datetime, ler=encarte_pdf.ler) -> dict:
                             )
                             resumo["revisao"] += monitor.abrir_revisao(conn, "anomalia", anomalia, proposta)
                             continue
-                        faixas = [("varejo", item.preco_centavos)]
-                        if item.condicional_centavos:
-                            faixas.append(("clube", item.condicional_centavos))  # Clube Mais ou cartão da loja (R5)
-                        for faixa, centavos in faixas:
-                            if (produto, faixa) in gravados:
-                                continue
-                            gravados.add((produto, faixa))
-                            for loja in lojas:
-                                conn.execute(
-                                    """insert into observacao_preco
-                                         (produto_id, loja_id, preco_centavos, faixa, fonte,
-                                          observado_em, valido_ate, evidencia_id)
-                                       values (%s, %s, %s, %s, 'encarte', %s, %s, %s)""",
-                                    (produto, loja, centavos, faixa, agora, valido_ate, f"fort:{e['id']}:p{item.pagina}"),
-                                )
-                                precos += 1
+                        precos += gravar_precos(
+                            conn, produto, lojas, item.preco_centavos, item.condicional_centavos,
+                            agora, valido_ate, f"fort:{e['id']}:p{item.pagina}", gravados,
+                        )  # fmt: skip
             conn.execute(
                 """insert into encarte_lido (rede_id, encarte_id, titulo, valido_ate, itens, precos, lido_em)
                    values (%s, %s, %s, %s, %s, %s, %s) on conflict (rede_id, encarte_id) do nothing""",
