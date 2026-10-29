@@ -290,9 +290,11 @@ def _mediana(conn, referencia: str, agora: datetime) -> int | None:
         precos = [
             r["preco_centavos"]
             for r in conn.execute(
-                """select preco_centavos from observacao_preco
+                """select preco_centavos from preco_atual where produto_id = %s and faixa = 'varejo' and observado_em >= %s
+                   union all
+                   select preco_centavos from observacao_preco
                    where produto_id = %s and faixa = 'varejo' and observado_em >= %s""",
-                (produto, agora - timedelta(days=30)),
+                (produto, agora - timedelta(days=30), produto, agora - timedelta(days=30)),
             ).fetchall()
         ]
     except psycopg.errors.InvalidTextRepresentation:

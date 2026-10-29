@@ -36,7 +36,7 @@ def contexto(conn: Connection, membro: Membro) -> Contexto:
     ).fetchall()
     fontes: dict[str, set] = {}
     for r in conn.execute(
-        """select distinct loja_id, fonte from observacao_preco
+        """select distinct loja_id, fonte from preco_atual
            where loja_id = any(%s) and observado_em >= %s and (valido_ate is null or valido_ate >= now())""",
         ([lj["id"] for lj in lojas], datetime.now(UTC) - JANELA_SITE),
     ).fetchall():

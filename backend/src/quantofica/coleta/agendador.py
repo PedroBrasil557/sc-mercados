@@ -24,7 +24,9 @@ from ..agentes import rodada
 from ..qualidade import monitor
 from ..qualidade.monitor import Anomalia
 from ..regras.preco import Faixa
+from . import gravar
 from . import redes as config
+from .gravar import Preco
 from .vtex import ClienteHttp, Http, PrecoColetado, Rede, coletar
 
 JANELA_HISTORICO = timedelta(days=30)
@@ -123,10 +125,13 @@ def _rodar_rede(conn: psycopg.Connection, http: Http, rede: Rede, agora: datetim
                 "select id, seller_id from loja where rede_id = %s and seller_id is not null", (rede_id,)
             ).fetchall()
         }
+        # Referência para "preço fora da curva": o preço atual do produto nas outras lojas e as mudanças recentes.
         historico: dict[str, list[int]] = {}
         for r in conn.execute(
-            "select produto_id, preco_centavos from observacao_preco where faixa = %s and observado_em >= %s",
-            (faixa, agora - JANELA_HISTORICO),
+            """select produto_id, preco_centavos from preco_atual where faixa = %s and observado_em >= %s
+               union all
+               select produto_id, preco_centavos from observacao_preco where faixa = %s and observado_em >= %s""",
+            (faixa, agora - JANELA_HISTORICO, faixa, agora - JANELA_HISTORICO),
         ).fetchall():
             historico.setdefault(str(r["produto_id"]), []).append(r["preco_centavos"])
 
@@ -156,13 +161,15 @@ def _rodar_rede(conn: psycopg.Connection, http: Http, rede: Rede, agora: datetim
                        on conflict (rede_id, sku) do update set nome_no_site = excluded.nome_no_site""",
                     (produto, rede_id, sku, nome_site),
                 )
-            for g in plano.gravar:
-                conn.execute(
-                    """insert into observacao_preco
-                         (produto_id, loja_id, preco_centavos, preco_de_centavos, faixa, fonte, observado_em, evidencia_id)
-                       values (%s, %s, %s, %s, %s, 'site', %s, %s)""",
-                    (g.produto_id, g.loja_id, g.preco_centavos, g.preco_de_centavos, faixa, agora, g.evidencia),
-                )
+            # Só o que mudou vai para o histórico; o resto só é confirmado no preço atual.
+            gravados = gravar.registrar(
+                conn,
+                [
+                    Preco(g.produto_id, g.loja_id, g.preco_centavos, faixa, "site", g.preco_de_centavos, None, g.evidencia)
+                    for g in plano.gravar
+                ],
+                agora,
+            )
             for codigo in nao_encontrados:
                 conn.execute(
                     """insert into ean_ausente (rede_id, codigo, verificado_em) values (%s, %s, %s)
@@ -175,7 +182,13 @@ def _rodar_rede(conn: psycopg.Connection, http: Http, rede: Rede, agora: datetim
                    enviados_revisao = %s where id = %s""",
                 (len(produto_por_ean), len(plano.gravar), abertas, execucao),
             )
-        return {"rede": nome, "precos": len(plano.gravar), "revisao": abertas, "so_catalogo": plano.so_catalogo}
+        return {
+            "rede": nome,
+            "precos": len(plano.gravar),
+            "mudaram": gravados["mudaram"],
+            "revisao": abertas,
+            "so_catalogo": plano.so_catalogo,
+        }
     except Exception as erro:
         conn.execute(
             "update execucao_coleta set terminada_em = now(), status = 'falhou', erro = %s where id = %s",

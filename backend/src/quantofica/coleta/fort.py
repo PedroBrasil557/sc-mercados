@@ -28,8 +28,9 @@ from ..qualidade import monitor
 from ..qualidade.monitor import Anomalia
 from ..regras import ean as ean_util
 from ..regras import tamanho as tam
-from . import encarte_pdf
+from . import encarte_pdf, gravar
 from .casamento import Candidato, casar, palavras
+from .gravar import Preco
 from .vtex import ClienteHttp
 
 API = "https://api.fortatacadista.com.br/storefront/graphql"
@@ -190,20 +191,14 @@ def gravar_precos(conn, produto, lojas, preco_centavos, condicional_centavos, ag
     """Preço normal (varejo) e condicional (Clube Mais ou cartão da loja, fora do total: R5) em cada loja."""
     gravados = set() if gravados is None else gravados
     faixas = [("varejo", preco_centavos)] + ([("clube", condicional_centavos)] if condicional_centavos else [])
-    n = 0
+    linhas = []
     for faixa, centavos in faixas:
         if (str(produto), faixa) in gravados:
             continue
         gravados.add((str(produto), faixa))
-        for loja in lojas:
-            conn.execute(
-                """insert into observacao_preco
-                     (produto_id, loja_id, preco_centavos, faixa, fonte, observado_em, valido_ate, evidencia_id)
-                   values (%s, %s, %s, %s, 'encarte', %s, %s, %s)""",
-                (produto, loja, centavos, faixa, agora, valido_ate, evidencia),
-            )
-            n += 1
-    return n
+        linhas += [Preco(str(produto), str(loja), centavos, faixa, "encarte", None, valido_ate, evidencia) for loja in lojas]
+    gravar.registrar(conn, linhas, agora)
+    return len(linhas)
 
 
 def validade_do_item(conn, rede_id, proposta: dict) -> date | None:
@@ -255,8 +250,10 @@ def rodar(conn, http, agora: datetime, ler=encarte_pdf.ler) -> dict:
     catalogo = carregar_catalogo(conn)
     historico: dict[str, list[int]] = {}
     for r in conn.execute(
-        "select produto_id, preco_centavos from observacao_preco where faixa = 'varejo' and observado_em >= %s",
-        (agora - JANELA_HISTORICO,),
+        """select produto_id, preco_centavos from preco_atual where faixa = 'varejo' and observado_em >= %s
+           union all
+           select produto_id, preco_centavos from observacao_preco where faixa = 'varejo' and observado_em >= %s""",
+        (agora - JANELA_HISTORICO, agora - JANELA_HISTORICO),
     ).fetchall():
         historico.setdefault(str(r["produto_id"]), []).append(r["preco_centavos"])
 
