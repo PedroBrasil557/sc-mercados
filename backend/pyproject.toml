@@ -9,6 +9,7 @@ dependencies = [
   "psycopg[binary,pool]>=3.2",
   "pydantic>=2.8",
   "tzdata>=2024.1",  # fusos horários na imagem slim do container
+  "pypdf>=6.0",  # texto dos encartes em PDF (coleta)
 ]
 
 [project.optional-dependencies]
