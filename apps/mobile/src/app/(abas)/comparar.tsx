@@ -67,8 +67,11 @@ export default function Comparar() {
   }
 
   const lojas = dados.lojas;
+  // A API manda a recomendada primeiro (a mais perto, a não ser que outra pague a viagem e sobre 10 reais).
   const maisBarata = lojas[0];
-  const maisCara = lojas[lojas.length - 1];
+  const menorPrateleira = Math.min(...lojas.map((l) => l.total_centavos));
+  const etiqueta = maisBarata && maisBarata.total_centavos <= menorPrateleira ? "Mais barato" : "Melhor para você";
+  const maisCara = [...lojas].sort((a, b) => b.total_centavos - a.total_centavos)[0];
   const foraDaSoma = dados.itens - dados.comuns;
   const nomeDaRede = (id: string) => lojas.find((l) => l.loja_id === id)?.rede ?? "";
   const subtitulo = lojas.length
@@ -101,10 +104,12 @@ export default function Comparar() {
           detalhe={`${l.bairro ?? l.nome} · ${km(l.distancia_km)}`}
           total={reais(l.total_centavos)}
           destaque={i === 0 && lojas.length > 1}
+          etiqueta={etiqueta}
+          nota={l.nota}
           aoTocar={() => setRedeAberta({ rede: l.rede, loja: l.loja_id })}
           diferenca={
             i === 0
-              ? lojas.length > 1 && maisCara && maisCara.total_centavos > l.total_centavos
+              ? etiqueta === "Mais barato" && lojas.length > 1 && maisCara && maisCara.total_centavos > l.total_centavos
                 ? `${reais(maisCara.total_centavos - l.total_centavos)} a menos`
                 : undefined
               : maisBarata

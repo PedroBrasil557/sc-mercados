@@ -143,7 +143,9 @@ export default function Lista() {
         ) : maisBarata && itens.some((i) => !i.comprado) ? (
           <View style={[estilos.resumo, { backgroundColor: cor.fundoProfundo }]}>
             <View style={{ flex: 1 }}>
-              <Text style={[fonte("rotulo"), { color: cor.textoInverso }]}>Mais barato hoje</Text>
+              <Text style={[fonte("rotulo"), { color: cor.textoInverso }]}>
+                {dados?.lojas.every((l) => maisBarata.total_centavos <= l.total_centavos) ? "Mais barato hoje" : "Melhor para você hoje"}
+              </Text>
               <Text numberOfLines={1} style={[fonte("precoMedio"), { color: cor.textoInverso }]}>
                 {reais(maisBarata.total_centavos)} · {maisBarata.rede}
               </Text>

@@ -10,8 +10,9 @@ import { Campo } from "@/componentes/Campo";
 import { ConvidarCasa } from "@/componentes/ConvidarCasa";
 import { Icone, type NomeIcone } from "@/componentes/Icone";
 import { PainelRecuperacao } from "@/componentes/PainelRecuperacao";
+import { PainelInferior } from "@/componentes/PainelInferior";
 import { SeletorDeBairro } from "@/componentes/SeletorDeBairro";
-import { lojasPreferidas, useComparacao } from "@/lista/comparacao";
+import { custoKm, definirCustoKm, lojasPreferidas, OPCOES_DE_VIAGEM, useComparacao } from "@/lista/comparacao";
 import { trocarApelido, trocarBairro, useLista } from "@/lista/sincronia";
 import { fonte, useTema } from "@/tema";
 
@@ -23,11 +24,13 @@ export default function Perfil() {
   const [escolhendoBairro, setEscolhendoBairro] = useState(false);
   const [renomeando, setRenomeando] = useState(false);
   const [recuperando, setRecuperando] = useState(false);
+  const [escolhendoViagem, setEscolhendoViagem] = useState(false);
   const aviso = useAvisoDeQuinta();
   const { dados } = useComparacao();
   if (!sessao) return null;
   const preferidas = Object.values(lojasPreferidas());
   const favoritas = (dados?.lojas ?? []).filter((l) => preferidas.includes(l.loja_id)).map((l) => l.nome);
+  const viagem = OPCOES_DE_VIAGEM.find((o) => o.centavos === custoKm()) ?? OPCOES_DE_VIAGEM[0];
   const outros = Object.entries(sessao.nomes).filter(([id]) => id !== sessao.membro_id);
 
   return (
@@ -61,6 +64,12 @@ export default function Perfil() {
           titulo="Lojas favoritas"
           detalhe={favoritas.length ? favoritas.join(", ") : "A mais perto de cada rede. Para trocar, toque num mercado em Comparar"}
           aoTocar={() => router.navigate("/comparar")}
+        />
+        <Linha
+          icone="rota"
+          titulo={`Custo da viagem: ${viagem.nome.toLowerCase()}`}
+          detalhe="Conta na hora de dizer se vale ir a um mercado mais longe"
+          aoTocar={() => setEscolhendoViagem(true)}
           ultima
         />
       </Grupo>
@@ -77,6 +86,20 @@ export default function Perfil() {
 
       <ConvidarCasa visivel={convidando} aoFechar={() => setConvidando(false)} />
       <PainelRecuperacao visivel={recuperando} aoFechar={() => setRecuperando(false)} />
+      <PainelInferior visivel={escolhendoViagem} titulo="Como você vai ao mercado?" aoFechar={() => setEscolhendoViagem(false)}>
+        {OPCOES_DE_VIAGEM.map((o) => (
+          <Linha
+            key={o.nome}
+            icone={o.centavos === viagem.centavos ? "ok" : "rota"}
+            titulo={o.nome}
+            detalhe={o.detalhe}
+            aoTocar={() => {
+              definirCustoKm(o.centavos);
+              setEscolhendoViagem(false);
+            }}
+          />
+        ))}
+      </PainelInferior>
       <ExplicacaoDosAvisos visivel={aviso.explicando} aoPermitir={() => void aviso.ligar()} aoFechar={aviso.fecharExplicacao} />
       <SeletorDeBairro
         visivel={escolhendoBairro}
