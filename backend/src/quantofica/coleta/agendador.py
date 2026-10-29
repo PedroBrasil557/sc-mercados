@@ -129,7 +129,23 @@ def _rodar_rede(conn: psycopg.Connection, http: Http, rede: Rede, agora: datetim
         ).fetchall():
             historico.setdefault(str(r["produto_id"]), []).append(r["preco_centavos"])
 
-        coletados = coletar(http, rede, list(produto_por_ean))
+        # Cache: o SKU de cada produto nesta rede (achado antes) e o que a rede não vende (por 7 dias).
+        conhecidos = {
+            r["codigo"]: (r["sku"], r["nome_no_site"] or "")
+            for r in conn.execute(
+                """select distinct on (e.codigo) e.codigo, pr.sku, pr.nome_no_site
+                   from produto_na_rede pr join ean e on e.produto_id = pr.produto_id where pr.rede_id = %s""",
+                (rede_id,),
+            ).fetchall()
+        }
+        ausentes = {
+            r["codigo"]
+            for r in conn.execute(
+                "select codigo from ean_ausente where rede_id = %s and verificado_em > %s", (rede_id, agora - timedelta(days=7))
+            ).fetchall()
+        }
+        nao_encontrados: list[str] = []
+        coletados = coletar(http, rede, [e for e in produto_por_ean if e not in ausentes], conhecidos, nao_encontrados)
         plano = planejar(coletados, loja_por_seller, produto_por_ean, historico)
 
         with conn.transaction():
@@ -145,6 +161,12 @@ def _rodar_rede(conn: psycopg.Connection, http: Http, rede: Rede, agora: datetim
                          (produto_id, loja_id, preco_centavos, preco_de_centavos, faixa, fonte, observado_em, evidencia_id)
                        values (%s, %s, %s, %s, %s, 'site', %s, %s)""",
                     (g.produto_id, g.loja_id, g.preco_centavos, g.preco_de_centavos, faixa, agora, g.evidencia),
+                )
+            for codigo in nao_encontrados:
+                conn.execute(
+                    """insert into ean_ausente (rede_id, codigo, verificado_em) values (%s, %s, %s)
+                       on conflict (rede_id, codigo) do update set verificado_em = excluded.verificado_em""",
+                    (rede_id, codigo, agora),
                 )
             abertas = sum(monitor.abrir_revisao(conn, r.tipo, r.anomalia, r.proposta) for r in plano.revisar)
             conn.execute(
