@@ -6,6 +6,7 @@ import { ActivityIndicator, Pressable, ScrollView, Share, StyleSheet, Text, View
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, type DetalheDoProduto, type PrecoNaLoja } from "@/api/cliente";
+import { MarcaDaRede } from "@/componentes/MarcaDaRede";
 import { Botao } from "@/componentes/Botao";
 import { EtiquetaDePreco } from "@/componentes/EtiquetaDePreco";
 import { GraficoDePreco } from "@/componentes/GraficoDePreco";
@@ -166,6 +167,7 @@ export default function Produto() {
                           onPress={() => preco && setReportando(preco)}
                           style={[estilos.loja, i > 0 && { borderTopWidth: 1, borderTopColor: cor.bordaPadrao }]}
                         >
+                          <MarcaDaRede rede={l.rede} tamanho={32} />
                           <View style={{ flex: 1, gap: 2 }}>
                             <View style={estilos.nome}>
                               <Text style={[fonte("corpoForte"), { color: cor.textoPrincipal }]}>{l.rede}</Text>
