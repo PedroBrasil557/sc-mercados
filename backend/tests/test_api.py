@@ -376,3 +376,15 @@ def test_loja_so_com_itens_do_encarte_aparece_a_parte(api, dados, banco_url):
     # Os mesmos itens (o café) também na recomendada, para comparar
     assert poucos["mesmos_itens"] == 1 and poucos["mesmos_itens_na_recomendada_centavos"] > 0
     assert poucos["valido_ate"] is not None
+
+
+@pytest.mark.parametrize("caminho", ["/privacidade", "/termos", "/excluir-conta"])
+def test_paginas_legais_com_csp_e_dados_do_responsavel(api, caminho, monkeypatch):
+    monkeypatch.setenv("RESPONSAVEL_NOME", "Fulano <b>de Tal</b>")
+    monkeypatch.setenv("CONTATO_EMAIL", "contato@exemplo.com")
+    r = api.get(caminho)
+    assert r.status_code == 200
+    assert "script-src 'nonce-" in r.headers["content-security-policy"]
+    assert "{{" not in r.text
+    assert "contato@exemplo.com" in r.text
+    assert "<b>de Tal</b>" not in r.text  # nome entra como texto, nunca como HTML

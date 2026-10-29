@@ -1,0 +1,49 @@
+<h1>Apagar meus dados</h1>
+<p>Você pode apagar seus dados do SC Mercados a qualquer momento, sem precisar explicar o motivo.</p>
+
+<h2>Pelo app (o jeito mais rápido)</h2>
+<ol>
+  <li>Abra o SC Mercados.</li>
+  <li>Toque em <strong>Perfil</strong> e depois em <strong>Seus dados</strong>.</li>
+  <li>Toque em <strong>Apagar meus dados</strong> e confirme.</li>
+</ol>
+
+<h2>Sem o celular (pelo código de recuperação)</h2>
+<p>Se você perdeu o celular ou desinstalou o app e tinha gerado o código de recuperação (Perfil → Código de recuperação), digite-o aqui:</p>
+<form id="form" class="caixa">
+  <label for="codigo">Código de recuperação</label>
+  <input id="codigo" name="codigo" autocomplete="off" placeholder="XXXX-XXXX-XXXX" required minlength="8" maxlength="40">
+  <button type="submit" id="apagar">Apagar meus dados</button>
+  <div id="resultado" class="aviso" role="status" hidden></div>
+</form>
+<p class="suave">Sem o celular e sem o código, escreva para <a href="mailto:{{CONTATO}}">{{CONTATO}}</a> com o apelido e o bairro da casa. Como o app não tem cadastro, vamos pedir informações da lista para ter certeza de que a casa é sua.</p>
+
+<h2>O que é apagado</h2>
+<ul>
+  <li>Na hora: seu apelido, seu vínculo com a casa e os códigos de acesso do seu aparelho.</li>
+  <li>Se você era a última pessoa da casa: também a casa, as listas, os itens e o resumo dos cupons lidos.</li>
+  <li>Se outras pessoas continuam na casa: os itens que você pôs ficam na lista delas, <strong>sem o seu nome</strong>, e os preços que você avisou ficam sem autoria.</li>
+  <li>Registros técnicos de acesso (IP e horário) somem sozinhos em poucos dias.</li>
+</ul>
+
+<script nonce="{{NONCE}}">
+"use strict";
+const form = document.getElementById("form"), botao = document.getElementById("apagar"), resultado = document.getElementById("resultado");
+function mostrar(texto, erro) { resultado.hidden = false; resultado.textContent = texto; resultado.className = "aviso" + (erro ? " erro" : ""); }
+form.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  if (!confirm("Apagar seus dados do SC Mercados? Isso não pode ser desfeito.")) return;
+  botao.disabled = true;
+  try {
+    const r = await fetch("/v1/recuperar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ codigo: document.getElementById("codigo").value }) });
+    if (r.status === 404) throw new Error("Código não encontrado. Confira as letras e os números.");
+    if (r.status === 429) throw new Error("Muitas tentativas. Espere alguns minutos e tente de novo.");
+    if (!r.ok) throw new Error("Não deu certo agora. Tente de novo em instantes.");
+    const { token } = await r.json();
+    const d = await fetch("/v1/eu", { method: "DELETE", headers: { "Authorization": "Bearer " + token } });
+    if (d.status !== 204) throw new Error("Não deu certo agora. Tente de novo em instantes.");
+    form.reset();
+    mostrar("Pronto: seus dados foram apagados.", false);
+  } catch (e) { mostrar(e.message, true); botao.disabled = false; }
+});
+</script>

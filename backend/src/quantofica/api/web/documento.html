@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITULO}} · SC Mercados</title>
+<style nonce="{{NONCE}}">
+  :root { --fundo: #F6F4EE; --sup: #FFFFFF; --borda: #E3DFD3; --texto: #1C1F1A; --suave: #5F645A; --verde: #0E7553; --amarelo: #FFD43B; --perigo: #B42318; --perigo-suave: #FDECEA; --verde-suave: #E2F2EA; }
+  @media (prefers-color-scheme: dark) { :root { --fundo: #121411; --sup: #1C1F1A; --borda: #33372F; --texto: #EEF0EA; --suave: #A9AEA3; --verde: #4CC08F; --perigo: #F97066; --perigo-suave: #3A1715; --verde-suave: #14412F; } }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--fundo); color: var(--texto); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 16px; border-bottom: 1px solid var(--borda); background: var(--sup); }
+  header div { max-width: 720px; margin: 0 auto; display: flex; align-items: center; gap: 10px; }
+  .marca { font-weight: 800; font-size: 18px; }
+  .etiqueta { background: var(--amarelo); color: #1C1F1A; font-weight: 700; font-size: 12px; padding: 2px 8px; border-radius: 6px; }
+  main { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 28px; line-height: 1.2; margin: 0 0 4px; }
+  h2 { font-size: 19px; margin: 32px 0 8px; }
+  p, li { color: var(--texto); }
+  .suave { color: var(--suave); font-size: 14px; }
+  ul { padding-left: 20px; }
+  li { margin: 4px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 15px; }
+  th, td { text-align: left; vertical-align: top; padding: 8px; border-bottom: 1px solid var(--borda); }
+  th { font-size: 13px; color: var(--suave); }
+  a { color: var(--verde); }
+  .caixa { background: var(--sup); border: 1px solid var(--borda); border-radius: 14px; padding: 16px; margin: 16px 0; }
+  input { width: 100%; padding: 10px 12px; font: inherit; border: 1px solid var(--borda); border-radius: 10px; background: var(--fundo); color: var(--texto); letter-spacing: .08em; text-transform: uppercase; }
+  button { margin-top: 10px; padding: 10px 16px; font: inherit; font-weight: 600; border-radius: 10px; border: 1px solid var(--perigo); background: var(--perigo); color: #fff; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  .aviso { padding: 12px 14px; border-radius: 10px; margin-top: 12px; background: var(--verde-suave); }
+  .aviso.erro { background: var(--perigo-suave); color: var(--perigo); }
+  footer { max-width: 720px; margin: 0 auto; padding: 0 16px 32px; font-size: 14px; color: var(--suave); display: flex; gap: 16px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<header><div><span class="marca">SC Mercados</span><span class="etiqueta">{{TITULO}}</span></div></header>
+<main>
+{{CORPO}}
+</main>
+<footer>
+  <a href="/privacidade">Política de privacidade</a>
+  <a href="/termos">Termos de uso</a>
+  <a href="/excluir-conta">Apagar meus dados</a>
+</footer>
+</body>
+</html>
