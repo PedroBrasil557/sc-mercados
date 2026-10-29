@@ -5,10 +5,13 @@ import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "rea
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Botao } from "@/componentes/Botao";
+import { ChaveDoAviso, ExplicacaoDosAvisos, useAvisoDeQuinta } from "@/componentes/AvisoDeQuinta";
 import { Campo } from "@/componentes/Campo";
 import { ConvidarCasa } from "@/componentes/ConvidarCasa";
 import { Icone, type NomeIcone } from "@/componentes/Icone";
+import { PainelRecuperacao } from "@/componentes/PainelRecuperacao";
 import { SeletorDeBairro } from "@/componentes/SeletorDeBairro";
+import { lojasPreferidas, useComparacao } from "@/lista/comparacao";
 import { trocarApelido, trocarBairro, useLista } from "@/lista/sincronia";
 import { fonte, useTema } from "@/tema";
 
@@ -19,7 +22,12 @@ export default function Perfil() {
   const [convidando, setConvidando] = useState(false);
   const [escolhendoBairro, setEscolhendoBairro] = useState(false);
   const [renomeando, setRenomeando] = useState(false);
+  const [recuperando, setRecuperando] = useState(false);
+  const aviso = useAvisoDeQuinta();
+  const { dados } = useComparacao();
   if (!sessao) return null;
+  const preferidas = Object.values(lojasPreferidas());
+  const favoritas = (dados?.lojas ?? []).filter((l) => preferidas.includes(l.loja_id)).map((l) => l.nome);
   const outros = Object.entries(sessao.nomes).filter(([id]) => id !== sessao.membro_id);
 
   return (
@@ -47,19 +55,29 @@ export default function Perfil() {
           titulo={sessao.bairro_nome ?? "Escolher o bairro"}
           detalhe="Usamos só o bairro, nunca sua localização"
           aoTocar={() => setEscolhendoBairro(true)}
+        />
+        <Linha
+          icone="loja"
+          titulo="Lojas favoritas"
+          detalhe={favoritas.length ? favoritas.join(", ") : "A mais perto de cada rede. Para trocar, toque num mercado em Comparar"}
+          aoTocar={() => router.navigate("/comparar")}
           ultima
         />
       </Grupo>
 
       <Grupo>
+        <Linha icone="aviso" titulo="Ofertas de quinta-feira" detalhe="1 aviso por semana" direita={<ChaveDoAviso ligado={aviso.ligado} aoMudar={(v) => void aviso.alternar(v)} semRotulo />} />
         <Linha icone="oferta" titulo="Preço de sócio dos clubes" detalhe="Clube Mais, cooperado, Amigo Giassi" selo="Em breve" ultima />
       </Grupo>
 
       <Grupo>
+        <Linha icone="historico" titulo="Não perca a sua lista" detalhe="Código para usar num celular novo" aoTocar={() => setRecuperando(true)} />
         <Linha icone="info" titulo="Seus dados" detalhe="Não guardamos CPF nem localização" aoTocar={() => router.push("/dados")} ultima />
       </Grupo>
 
       <ConvidarCasa visivel={convidando} aoFechar={() => setConvidando(false)} />
+      <PainelRecuperacao visivel={recuperando} aoFechar={() => setRecuperando(false)} />
+      <ExplicacaoDosAvisos visivel={aviso.explicando} aoPermitir={() => void aviso.ligar()} aoFechar={aviso.fecharExplicacao} />
       <SeletorDeBairro
         visivel={escolhendoBairro}
         selecionado={sessao.bairro_id ?? null}
@@ -85,11 +103,12 @@ type LinhaProps = {
   icone?: NomeIcone;
   avatar?: { letra: string; destaque?: boolean };
   selo?: string;
+  direita?: ReactNode;
   aoTocar?: () => void;
   ultima?: boolean;
 };
 
-function Linha({ titulo, detalhe, icone, avatar, selo, aoTocar, ultima }: LinhaProps) {
+function Linha({ titulo, detalhe, icone, avatar, selo, direita, aoTocar, ultima }: LinhaProps) {
   const { cor } = useTema();
   const conteudo = (
     <>
@@ -106,7 +125,9 @@ function Linha({ titulo, detalhe, icone, avatar, selo, aoTocar, ultima }: LinhaP
         <Text style={[fonte("corpoForte"), { color: cor.textoPrincipal }]}>{titulo}</Text>
         <Text style={[fonte("legenda"), { color: cor.textoSuave }]}>{detalhe}</Text>
       </View>
-      {selo ? (
+      {direita ? (
+        direita
+      ) : selo ? (
         <View style={[estilos.selo, { backgroundColor: cor.fundoAfundado }]}>
           <Text style={[fonte("rotulo"), { color: cor.textoSuave }]}>{selo}</Text>
         </View>

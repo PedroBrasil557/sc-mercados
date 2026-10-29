@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, Linking, Modal, Pressable, Share, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { api } from "@/api/cliente";
+import { api, linkDoConvite } from "@/api/cliente";
 import { trocarApelido, useLista } from "@/lista/sincronia";
 import { fonte, useTema } from "@/tema";
 
@@ -43,7 +43,7 @@ function Painel({ aoFechar }: { aoFechar: () => void }) {
   }, []);
 
   const mensagem = (codigo: string) =>
-    `Entra na lista da nossa casa no SC Mercados! Abra o app, toque em "Recebi um convite da minha casa" e use o código ${codigo}. Vale por 48 horas.`;
+    `Entra na lista da nossa casa no SC Mercados! Abra pelo navegador: ${linkDoConvite(codigo)} — ou, no app, toque em "Recebi um convite da minha casa" e use o código ${codigo}. Vale por 48 horas.`;
 
   async function enviar() {
     if (!convite) return;
@@ -71,7 +71,7 @@ function Painel({ aoFechar }: { aoFechar: () => void }) {
           Convide a sua casa
         </Text>
         <Text style={[fonte("corpoPadrao"), { color: cor.textoSuave, textAlign: "center" }]}>
-          Quem usar o código entra na mesma lista e pode somar, tirar e marcar itens, mesmo sem internet.
+          Quem abrir o link entra na mesma lista e pode somar, tirar e marcar itens, mesmo sem ter o app.
         </Text>
         {precisaNome ? (
           <Campo rotulo="Seu nome" placeholder="Seu nome (a família vê nos itens)" value={nome} onChangeText={setNome} maxLength={40} />

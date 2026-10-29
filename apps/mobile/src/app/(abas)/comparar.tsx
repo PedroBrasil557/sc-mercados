@@ -1,11 +1,13 @@
 /** 05 Comparar: quanto fica a lista na loja mais perto de cada rede (R7, R8, R13, R14). */
 import { router } from "expo-router";
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useMemo, useState } from "react";
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Botao } from "@/componentes/Botao";
 import { Icone } from "@/componentes/Icone";
 import { LinhaDeMercado } from "@/componentes/LinhaDeMercado";
+import { PainelForaDaSoma, PainelOutrasLojas } from "@/componentes/PaineisDaComparacao";
 import { SeloDeFonte } from "@/componentes/SeloDeFonte";
 import { diferenca, km, reais, seloDeFonte } from "@/formatar";
 import { useComparacao } from "@/lista/comparacao";
@@ -18,6 +20,13 @@ export default function Comparar() {
   const { itens } = useLista();
   const { dados, carregando, semConexao, calculadaEm, atualizar } = useComparacao();
   const aComprar = itens.filter((i) => !i.comprado);
+  const [redeAberta, setRedeAberta] = useState<{ rede: string; loja: string } | null>(null);
+  const [foraAberto, setForaAberto] = useState(false);
+  const quantidades = useMemo(() => {
+    const q: Record<string, number> = {};
+    for (const i of itens) if (i.produto_id && !i.comprado) q[i.produto_id] = (q[i.produto_id] ?? 0) + i.quantidade;
+    return q;
+  }, [itens]);
 
   const cabecalho = (subtitulo: string | null, selo: string | null) => (
     <View style={estilos.cabecalho}>
@@ -92,6 +101,7 @@ export default function Comparar() {
           detalhe={`${l.bairro ?? l.nome} · ${km(l.distancia_km)}`}
           total={reais(l.total_centavos)}
           destaque={i === 0 && lojas.length > 1}
+          aoTocar={() => setRedeAberta({ rede: l.rede, loja: l.loja_id })}
           diferenca={
             i === 0
               ? lojas.length > 1 && maisCara && maisCara.total_centavos > l.total_centavos
@@ -140,18 +150,27 @@ export default function Comparar() {
       ) : null}
 
       {foraDaSoma > 0 ? (
-        <View
-          accessible
-          accessibilityRole="text"
-          accessibilityLabel={`${foraDaSoma} ${foraDaSoma === 1 ? "item fora da soma" : "itens fora da soma"}: não são vendidos em todas as lojas comparadas`}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${foraDaSoma} ${foraDaSoma === 1 ? "item fora da soma" : "itens fora da soma"}. Ver quais`}
+          onPress={() => setForaAberto(true)}
           style={[estilos.fora, { backgroundColor: cor.fundoSuperficie }]}
         >
           <Text style={[fonte("corpoForte"), { color: cor.textoPrincipal, flex: 1 }]}>
             {foraDaSoma} {foraDaSoma === 1 ? "item fora da soma" : "itens fora da soma"}
           </Text>
-          <Text style={[fonte("legenda"), { color: cor.textoSuave }]}>não vendidos em todas</Text>
-        </View>
+          <Text style={[fonte("corpoMenor"), { color: cor.estadoEconomia }]}>ver</Text>
+          <Icone nome="seta-direita" cor={cor.estadoEconomia} tamanho={20} />
+        </Pressable>
       ) : null}
+      <PainelForaDaSoma visivel={foraAberto} aoFechar={() => setForaAberto(false)} comparacao={dados} itens={itens} />
+      <PainelOutrasLojas
+        key={redeAberta ? `${redeAberta.rede}-${redeAberta.loja}` : "fechado"}
+        rede={redeAberta?.rede ?? null}
+        lojaAtual={redeAberta?.loja ?? null}
+        quantidades={quantidades}
+        aoFechar={() => setRedeAberta(null)}
+      />
     </ScrollView>
   );
 }

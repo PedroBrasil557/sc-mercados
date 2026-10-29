@@ -132,6 +132,39 @@ def entrar(codigo: str, pedido: Entrada, conn: Conexao):
     return {"token": token, "membro_id": membro, "casa_id": convite["casa_id"], "lista_id": listas[0]["id"] if listas else None}
 
 
+TAMANHO_RECUPERACAO = 12  # 31^12: inviável de adivinhar, ainda mais com o limite por IP
+
+
+@router.post("/eu/recuperacao", status_code=201)
+def gerar_recuperacao(membro: MembroAtual, conn: Conexao):
+    """Gera (ou troca) o código de recuperação. Ele aparece só agora; o banco guarda só o hash."""
+    codigo = "".join(secrets.choice(ALFABETO_CONVITE) for _ in range(TAMANHO_RECUPERACAO))
+    conn.execute("update membro set hash_recuperacao = %s where id = %s", (_hash(codigo), membro.id))
+    return {"codigo": "-".join(codigo[i : i + 4] for i in range(0, TAMANHO_RECUPERACAO, 4))}
+
+
+class Recuperacao(BaseModel):
+    codigo: str = Field(min_length=8, max_length=40)
+
+
+@router.post("/recuperar", status_code=201, dependencies=[Depends(limite_convite)])
+def recuperar(pedido: Recuperacao, conn: Conexao):
+    """Celular novo: o código devolve um token novo para o mesmo membro, na mesma casa e na mesma lista."""
+    codigo = pedido.codigo.strip().upper().replace("-", "").replace(" ", "")
+    with conn.transaction():
+        membro = conn.execute("select id, casa_id from membro where hash_recuperacao = %s", (_hash(codigo),)).fetchone()
+        if membro is None:
+            raise HTTPException(404, "código de recuperação não encontrado")
+        token = _emitir_token(conn, membro["id"])
+    listas = conn.execute("select id from lista where casa_id = %s order by nome", (membro["casa_id"],)).fetchall()
+    return {
+        "token": token,
+        "membro_id": membro["id"],
+        "casa_id": membro["casa_id"],
+        "lista_id": listas[0]["id"] if listas else None,
+    }
+
+
 @router.get("/eu")
 def eu(membro: MembroAtual, conn: Conexao):
     casa = conn.execute("select bairro_id from casa where id = %s", (membro.casa_id,)).fetchone()

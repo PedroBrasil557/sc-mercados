@@ -20,6 +20,19 @@ export type EstadoDaComparacao = {
 };
 
 const CHAVE = "comparacao";
+const CHAVE_PREFERIDAS = "lojas_preferidas"; // rede -> loja escolhida pela casa (tela "Outras lojas da rede")
+
+export function lojasPreferidas(): Record<string, string> {
+  return armazem.lerGuardado<Record<string, string>>(CHAVE_PREFERIDAS) ?? {};
+}
+
+/** A casa escolhe a loja de uma rede; a comparação passa a usar ela no lugar da mais perto. */
+export function escolherLoja(rede: string, lojaId: string): void {
+  armazem.guardar(CHAVE_PREFERIDAS, { ...lojasPreferidas(), [rede]: lojaId });
+  ultimaChave = "";
+  ouvintes.forEach((f) => f());
+}
+
 let estado: EstadoDaComparacao = { dados: null, calculadaEm: null, carregando: false, semConexao: false, erro: null, ...lerGuardada() };
 const ouvintes = new Set<() => void>();
 let ultimaChave = "";
@@ -42,7 +55,7 @@ async function calcular(chave: string, bairroId: string, itens: Record<string, n
   const meu = ++pedido;
   mudar({ carregando: true });
   try {
-    const dados = Object.keys(itens).length ? await api.comparar(bairroId, itens) : null;
+    const dados = Object.keys(itens).length ? await api.comparar(bairroId, itens, Object.values(lojasPreferidas())) : null;
     if (meu !== pedido) return; // chegou uma resposta mais nova
     ultimaChave = chave;
     const calculadaEm = Date.now();
@@ -72,7 +85,7 @@ export function useComparacao(): EstadoDaComparacao & { atualizar: () => void } 
     return q;
   }, [itens]);
   const bairroId = sessao?.bairro_id ?? null;
-  const chave = bairroId ? `${bairroId}|${JSON.stringify(Object.entries(quantidades).sort())}` : "";
+  const chave = bairroId ? `${bairroId}|${JSON.stringify(Object.entries(quantidades).sort())}|${JSON.stringify(lojasPreferidas())}` : "";
 
   useEffect(() => {
     if (!bairroId) return;

@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Lista da casa · SC Mercados</title>
+<style nonce="{{NONCE}}">
+  :root { --tela:#F2F4EF; --sup:#FFFFFF; --afund:#E8ECE5; --prof:#0F3B2E; --txt:#14231D; --suave:#5B6A62; --borda:#D7DDD4; --forte:#77857D; --amarelo:#FFD43B; --verde:#0E7553; --verdeSuave:#DDF2E8; }
+  @media (prefers-color-scheme: dark) { :root { --tela:#101614; --sup:#18201D; --afund:#202A26; --prof:#0B2A21; --txt:#ECEFE9; --suave:#A3ABA4; --borda:#2E3934; --forte:#7D8A83; --verde:#4FC596; --verdeSuave:#173A2D; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--tela); color:var(--txt); font:16px/22px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width:520px; margin:0 auto; padding:16px 20px 48px; }
+  .faixa { display:flex; gap:12px; align-items:center; background:var(--amarelo); color:#14231D; padding:12px 20px; font-size:14px; line-height:20px; }
+  h1 { font-size:22px; line-height:28px; margin:16px 0 4px; letter-spacing:-.5px; }
+  .suave { color:var(--suave); font-size:14px; line-height:20px; margin:0; }
+  .barato { display:flex; justify-content:space-between; gap:12px; background:var(--verdeSuave); border-radius:14px; padding:14px 16px; margin:16px 0; font-weight:700; }
+  .barato span:first-child { font-weight:500; color:var(--suave); }
+  .busca { width:100%; height:52px; border-radius:26px; border:1.5px solid var(--forte); background:var(--sup); color:var(--txt); padding:0 18px; font:inherit; }
+  ul { list-style:none; padding:0; margin:8px 0 0; }
+  li { display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--borda); }
+  li .nome { flex:1; min-width:0; }
+  li .nome b { display:block; font-weight:600; }
+  li .nome small { color:var(--suave); font-size:12px; }
+  .qtd { display:flex; align-items:center; gap:2px; background:var(--afund); border-radius:24px; padding:4px; }
+  .qtd button, .add { width:40px; height:40px; border-radius:20px; border:0; background:var(--sup); color:var(--txt); font-size:20px; cursor:pointer; }
+  .add { background:var(--prof); color:#fff; }
+  .qtd span { width:32px; text-align:center; font-weight:700; }
+  .principal { width:100%; height:52px; border:0; border-radius:26px; background:var(--prof); color:#fff; font:700 16px system-ui; margin-top:12px; cursor:pointer; }
+  input.campo { width:100%; height:52px; border-radius:14px; border:1px solid var(--borda); background:var(--sup); color:var(--txt); padding:0 14px; font:inherit; margin-top:12px; }
+  .erro { color:#B3261E; font-size:14px; }
+  .cresce { flex:1; }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<div class="faixa"><span class="cresce">Baixe o app SC Mercados para receber as ofertas de quinta. Em breve na Google Play.</span></div>
+<main id="app"><p class="suave">Carregando a lista…</p></main>
+<script nonce="{{NONCE}}">
+(function () {
+  "use strict";
+  var codigo = location.pathname.split("/").filter(Boolean).pop();
+  var CHAVE = "scmercados_" + codigo;
+  var app = document.getElementById("app");
+  var sessao = null;
+  try { sessao = JSON.parse(localStorage.getItem(CHAVE) || "null"); } catch (e) { sessao = null; }
+
+  function el(tag, props, filhos) {
+    var n = document.createElement(tag);
+    Object.keys(props || {}).forEach(function (k) { if (k === "texto") n.textContent = props[k]; else if (k.indexOf("on") === 0) n.addEventListener(k.slice(2), props[k]); else n.setAttribute(k, props[k]); });
+    (filhos || []).forEach(function (f) { if (f) n.appendChild(f); });
+    return n;
+  }
+  function reais(c) { return "R$ " + (c / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function uuid() { return crypto.randomUUID ? crypto.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(/[018]/g, function (c) { return (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16); }); }
+  function api(metodo, caminho, corpo) {
+    var cab = { "Accept": "application/json" };
+    if (corpo) cab["Content-Type"] = "application/json";
+    if (sessao) cab["Authorization"] = "Bearer " + sessao.token;
+    return fetch(caminho, { method: metodo, headers: cab, body: corpo ? JSON.stringify(corpo) : undefined }).then(function (r) {
+      if (!r.ok) return r.json().catch(function () { return {}; }).then(function (d) { throw new Error(d.detail || ("erro " + r.status)); });
+      return r.status === 204 ? null : r.json();
+    });
+  }
+  function operar(itemId, tipo, produtoId) {
+    var op = { id: uuid(), item_id: itemId, tipo: tipo, feita_em: new Date().toISOString() };
+    if (produtoId) op.produto_id = produtoId;
+    return api("POST", "/v1/listas/" + sessao.lista + "/operacoes", { operacoes: [op] }).then(carregar);
+  }
+
+  function entrar() {
+    app.replaceChildren(
+      el("h1", { texto: "Entrar na lista da casa" }),
+      el("p", { class: "suave", texto: "Você recebeu um convite. Escreva como a família te chama e a lista abre aqui, sem precisar do app." }),
+      el("input", { class: "campo", id: "apelido", maxlength: "40", placeholder: "Seu nome" }),
+      el("button", { class: "principal", texto: "Entrar na lista", onclick: function () {
+        var apelido = document.getElementById("apelido").value.trim();
+        if (!apelido) return;
+        api("POST", "/v1/convites/" + encodeURIComponent(codigo), { apelido: apelido }).then(function (r) {
+          sessao = { token: r.token, lista: r.lista_id };
+          localStorage.setItem(CHAVE, JSON.stringify(sessao));
+          carregar();
+        }).catch(function (e) { app.appendChild(el("p", { class: "erro", texto: e.message })); });
+      } })
+    );
+  }
+
+  function buscar(termo, lista) {
+    if (!termo.trim()) { lista.replaceChildren(); return; }
+    api("GET", "/v1/produtos?busca=" + encodeURIComponent(termo)).then(function (ps) {
+      lista.replaceChildren.apply(lista, ps.slice(0, 8).map(function (p) {
+        var detalhe = [p.marca, p.menor_preco_centavos ? "a partir de " + reais(p.menor_preco_centavos) + " no " + p.menor_preco_rede : null].filter(Boolean).join(" · ");
+        return el("li", {}, [el("div", { class: "nome" }, [el("b", { texto: p.nome }), el("small", { texto: detalhe })]),
+          el("button", { class: "add", "aria-label": "Pôr " + p.nome + " na lista", texto: "+", onclick: function () { operar(uuid(), "criar", p.id); } })]);
+      }));
+    });
+  }
+
+  function carregar() {
+    Promise.all([api("GET", "/v1/listas/" + sessao.lista), api("GET", "/v1/eu")]).then(function (r) {
+      var itens = r[0].itens.filter(function (i) { return !i.comprado; });
+      var eu = r[1];
+      var nomes = eu.casa.membros.map(function (m) { return m.apelido; }).join(", ");
+      var resultados = el("ul", {});
+      var busca = el("input", { class: "busca", placeholder: "O que está faltando em casa?", "aria-label": "Buscar produto" });
+      var espera;
+      busca.addEventListener("input", function () { clearTimeout(espera); espera = setTimeout(function () { buscar(busca.value, resultados); }, 250); });
+      var barato = el("div", { class: "barato", hidden: "" });
+      app.replaceChildren(
+        el("h1", { texto: "Lista da casa" }),
+        el("p", { class: "suave", texto: "Casa de " + nomes + ". As mudanças aparecem para todos da casa." }),
+        barato, busca, resultados,
+        el("ul", {}, itens.map(function (i) {
+          return el("li", {}, [
+            el("div", { class: "nome" }, [el("b", { texto: i.nome || "Item da casa" }), el("small", { texto: [i.marca, i.adicionado_por].filter(Boolean).join(" · ") })]),
+            el("div", { class: "qtd" }, [
+              el("button", { "aria-label": "Tirar um", texto: "−", onclick: function () { operar(i.id, "tirar"); } }),
+              el("span", { texto: String(i.quantidade).replace(".", ",") }),
+              el("button", { "aria-label": "Somar um", texto: "+", onclick: function () { operar(i.id, "somar"); } })
+            ])
+          ]);
+        }))
+      );
+      if (eu.casa.bairro_id && itens.length) {
+        api("POST", "/v1/comparar", { bairro_id: eu.casa.bairro_id, lista_id: sessao.lista }).then(function (c) {
+          if (!c.lojas.length) return;
+          barato.replaceChildren(el("span", { texto: "Mais barato hoje" }), el("span", { texto: reais(c.lojas[0].total_centavos) + " · " + c.lojas[0].rede }));
+          barato.hidden = false;
+        });
+      }
+    }).catch(function () { localStorage.removeItem(CHAVE); sessao = null; entrar(); });
+  }
+
+  if (sessao) carregar(); else entrar();
+  setInterval(function () { if (sessao && document.visibilityState === "visible" && !document.activeElement.matches("input")) carregar(); }, 15000);
+})();
+</script>
+</body>
+</html>

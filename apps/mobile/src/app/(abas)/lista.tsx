@@ -9,9 +9,11 @@ import { Botao } from "@/componentes/Botao";
 import { Chip } from "@/componentes/Chip";
 import { Icone } from "@/componentes/Icone";
 import { ItemDaLista } from "@/componentes/ItemDaLista";
+import { PainelRecuperacao } from "@/componentes/PainelRecuperacao";
 import { quantidade, reais } from "@/formatar";
+import * as armazem from "@/lista/armazem";
 import { useComparacao } from "@/lista/comparacao";
-import { alternarComprado, type ItemVisivel, remover, restaurar, somar, tirar, useLista } from "@/lista/sincronia";
+import { type ItemVisivel, remover, restaurar, somar, tirar, useLista } from "@/lista/sincronia";
 import { fonte, useTema } from "@/tema";
 
 // Sugestões da lista vazia: só o que existe no catálogo (cada uma abre a busca já preenchida).
@@ -24,6 +26,13 @@ export default function Lista() {
   const { dados } = useComparacao();
   const [removido, setRemovido] = useState<ItemVisivel | null>(null);
   const sumirAviso = useCallback(() => setRemovido(null), []);
+  // R16: com 10 itens a lista já vale a pena guardar; o convite aparece uma vez só.
+  const [recuperacaoDispensada, setRecuperacaoDispensada] = useState(() => armazem.lerGuardado<boolean>("recuperacao_oferecida") ?? false);
+  const oferecerRecuperacao = itens.length >= 10 && !recuperacaoDispensada;
+  const dispensarRecuperacao = () => {
+    armazem.guardar("recuperacao_oferecida", true);
+    setRecuperacaoDispensada(true);
+  };
 
   const buscar = (termo = "") => router.push({ pathname: "/adicionar", params: termo ? { busca: termo } : {} });
   const pessoas = sessao ? Object.values(sessao.nomes).map((n) => (n === sessao.apelido ? "você" : n)) : [];
@@ -94,7 +103,7 @@ export default function Lista() {
                 if (item.quantidade <= 1) setRemovido(item);
                 tirar(item.id);
               }}
-              aoTocar={() => alternarComprado(item)}
+              aoTocar={() => item.produto_id && router.push({ pathname: "/produto/[id]", params: { id: item.produto_id } })}
               aoSegurar={() => {
                 setRemovido(item);
                 remover(item.id);
@@ -120,6 +129,7 @@ export default function Lista() {
         </View>
       )}
 
+      <PainelRecuperacao visivel={oferecerRecuperacao} aoFechar={dispensarRecuperacao} />
       <View style={[estilos.rodape, { paddingBottom: 12 }]} pointerEvents="box-none">
         {removido ? (
           <AvisoComDesfazer
@@ -138,7 +148,7 @@ export default function Lista() {
                 {reais(maisBarata.total_centavos)} · {maisBarata.rede}
               </Text>
             </View>
-            <Botao rotulo="Comparar" tipo="etiqueta" aoTocar={() => router.navigate("/comparar")} />
+            <Botao rotulo="No mercado" tipo="etiqueta" aoTocar={() => router.push({ pathname: "/no-mercado", params: { loja: maisBarata.loja_id } })} />
           </View>
         ) : null}
       </View>

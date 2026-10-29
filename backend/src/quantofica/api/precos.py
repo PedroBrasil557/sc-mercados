@@ -74,6 +74,8 @@ class PedidoComparacao(BaseModel):
     lista_id: UUID | None = None
     itens: dict[UUID, Decimal] | None = None  # produto -> quantidade
     custo_km_centavos: int = Field(default=CUSTO_KM_PADRAO_CENTAVOS, ge=0, le=1000)
+    # Loja escolhida pela casa numa rede (tela "Outras lojas da rede"); nas outras redes vale a mais perto (R13).
+    preferidas: list[UUID] = Field(default_factory=list, max_length=20)
 
     @model_validator(mode="after")
     def lista_ou_itens(self):
@@ -117,6 +119,10 @@ def comparar(pedido: PedidoComparacao, membro: MembroAtual, conn: Conexao):
     for lj in lojas:
         atual = mais_proxima.get(lj["rede"])
         if atual is None or dist[str(lj["id"])] < dist[str(atual["id"])]:
+            mais_proxima[lj["rede"]] = lj
+    preferidas = {str(p) for p in pedido.preferidas}
+    for lj in lojas:
+        if str(lj["id"]) in preferidas:
             mais_proxima[lj["rede"]] = lj
     escolhidas = {str(lj["id"]): lj for lj in mais_proxima.values()}
 

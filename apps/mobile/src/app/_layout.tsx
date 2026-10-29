@@ -53,6 +53,10 @@ export default function RaizLayout() {
         <Stack.Screen name="boas-vindas" />
         <Stack.Screen name="adicionar" options={{ animation: "slide_from_bottom" }} />
         <Stack.Screen name="dados" />
+        <Stack.Screen name="produto/[id]" />
+        <Stack.Screen name="no-mercado" />
+        <Stack.Screen name="ler-cupom" options={{ animation: "slide_from_bottom" }} />
+        <Stack.Screen name="cupom-lido" options={{ gestureEnabled: false }} />
       </Stack>
     </SafeAreaProvider>
   );

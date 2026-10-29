@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { Produto } from "@/api/cliente";
 import { Icone } from "@/componentes/Icone";
+import { LeitorDeCodigo } from "@/componentes/LeitorDeCodigo";
 import { Miniatura } from "@/componentes/Miniatura";
 import { reais, tamanho } from "@/formatar";
 import { adicionarProduto, buscarProdutos, useLista } from "@/lista/sincronia";
@@ -18,6 +19,7 @@ export default function Adicionar() {
   const { itens } = useLista();
   const [busca, setBusca] = useState(params.busca ?? "");
   const [resultado, setResultado] = useState<{ produtos: Produto[]; semConexao: boolean } | null>(null);
+  const [lendo, setLendo] = useState(false);
 
   useEffect(() => {
     let valido = true;
@@ -49,9 +51,25 @@ export default function Adicionar() {
             returnKeyType="search"
             style={[fonte("corpoForte"), estilos.campo, { color: cor.textoPrincipal }]}
           />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Ler o código de barras"
+            onPress={() => setLendo(true)}
+            style={[estilos.codigo, { backgroundColor: cor.fundoProfundo }]}
+          >
+            <Icone nome="codigo-barras" cor={cor.textoInverso} tamanho={20} />
+          </Pressable>
         </View>
       </View>
 
+      <LeitorDeCodigo
+        visivel={lendo}
+        aoFechar={() => setLendo(false)}
+        aoAchar={(p) => {
+          adicionarProduto(p);
+          setBusca(p.nome);
+        }}
+      />
       <FlatList
         data={resultado?.produtos ?? []}
         keyExtractor={(p) => p.id}
@@ -114,7 +132,8 @@ const estilos = StyleSheet.create({
   tela: { flex: 1 },
   topo: { flexDirection: "row", alignItems: "center", gap: 8, paddingLeft: 12, paddingRight: 20, paddingBottom: 12 },
   voltar: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
-  busca: { flex: 1, height: 54, borderRadius: 27, borderWidth: 1.5, flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16 },
+  busca: { flex: 1, height: 54, borderRadius: 27, borderWidth: 1.5, flexDirection: "row", alignItems: "center", gap: 12, paddingLeft: 16, paddingRight: 6 },
+  codigo: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
   campo: { flex: 1, paddingVertical: 0 },
   lista: { paddingHorizontal: 20, paddingBottom: 40 },
   resultado: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12 },

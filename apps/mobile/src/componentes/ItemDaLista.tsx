@@ -26,10 +26,9 @@ export function ItemDaLista({ item, meuNome, aoSomar, aoTirar, aoTocar, aoSegura
     <View style={[estilos.item, { borderBottomColor: cor.bordaPadrao }]}>
       <Pressable
         style={estilos.toque}
-        accessibilityRole="checkbox"
-        accessibilityState={{ checked: item.comprado }}
+        accessibilityRole="button"
         accessibilityLabel={`${item.nome}, quantidade ${qtd}${item.comprado ? ", já comprado" : ""}`}
-        accessibilityHint="Toque para marcar como comprado. Toque e segure para tirar da lista."
+        accessibilityHint="Toque para ver o preço em cada mercado. Toque e segure para tirar da lista."
         onPress={aoTocar}
         onLongPress={aoSegurar}
       >
