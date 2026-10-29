@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { fonte, useTema } from "@/tema";
 
 import { EtiquetaDePreco } from "./EtiquetaDePreco";
+import { MarcaDaRede } from "./MarcaDaRede";
 
 type Props = {
   rede: string;
@@ -34,9 +35,7 @@ export function LinhaDeMercado({ rede, detalhe, total, diferenca, destaque = fal
         pressed && { opacity: 0.85 },
       ]}
     >
-      <View style={[estilos.monograma, { backgroundColor: destaque ? cor.fundoSuperficie : cor.fundoAfundado }]}>
-        <Text style={[fonte("numeroMonograma"), { color: cor.textoPrincipal }]}>{rede.charAt(0)}</Text>
-      </View>
+      <MarcaDaRede rede={rede} fundo={destaque ? cor.fundoSuperficie : undefined} />
       <View style={estilos.mercado}>
         <View style={estilos.nome}>
           <Text numberOfLines={1} style={[fonte("corpoForte"), { color: cor.textoPrincipal }]}>
@@ -59,7 +58,6 @@ export function LinhaDeMercado({ rede, detalhe, total, diferenca, destaque = fal
 
 const estilos = StyleSheet.create({
   linha: { minHeight: 72, padding: 16, flexDirection: "row", alignItems: "center", gap: 12 },
-  monograma: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   mercado: { flex: 1, gap: 2 },
   nome: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", columnGap: 8, rowGap: 4 },
   total: { alignItems: "flex-end", gap: 2 },

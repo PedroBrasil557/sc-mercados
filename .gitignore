@@ -12,3 +12,5 @@ dist/
 *.jks
 google-service-account*.json
 *.egg-info/
+# Logos das redes: só para teste local, sem autorização para publicar (ver apps/mobile/assets/logos-teste/LEIA.md)
+apps/mobile/assets/logos-teste/*.png

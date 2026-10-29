@@ -6,6 +6,7 @@ import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { api, type Mercado, type Oferta } from "@/api/cliente";
+import { MarcaDaRede } from "@/componentes/MarcaDaRede";
 import { ChaveDoAviso, ExplicacaoDosAvisos, useAvisoDeQuinta } from "@/componentes/AvisoDeQuinta";
 import { CartaoDeOferta } from "@/componentes/CartaoDeOferta";
 import { Chip } from "@/componentes/Chip";
@@ -104,6 +105,7 @@ export default function Ofertas() {
                 </View>
               ) : null}
               <View style={estilos.titulo}>
+                <MarcaDaRede rede={loja.rede} tamanho={28} />
                 <Text accessibilityRole="header" style={[fonte(longe ? "corpoForte" : "tituloSecao"), { color: cor.textoPrincipal, flex: 1 }]}>
                   {loja.nome} · {km(loja.distancia_km)}
                 </Text>

@@ -6,6 +6,7 @@ import { useMercados } from "@/lista/mercado";
 import { fonte, useTema } from "@/tema";
 
 import { Icone } from "./Icone";
+import { MarcaDaRede } from "./MarcaDaRede";
 
 /** Figma "v2/Seletor de mercado": toda tela de preço começa pelo seu mercado. Toque troca o mercado. */
 export function SeletorDeMercado() {
@@ -20,7 +21,7 @@ export function SeletorDeMercado() {
       onPress={() => router.push("/seu-mercado")}
       style={({ pressed }) => [estilos.pilula, { backgroundColor: cor.fundoSuperficie, borderColor: cor.bordaPadrao }, pressed && { opacity: 0.8 }]}
     >
-      <Icone nome="loja" cor={cor.estadoEconomia} tamanho={20} />
+      {seu ? <MarcaDaRede rede={seu.rede} tamanho={22} /> : <Icone nome="loja" cor={cor.estadoEconomia} tamanho={20} />}
       <Text numberOfLines={1} style={[fonte("corpoMenor"), { color: cor.textoPrincipal, flexShrink: 1 }]}>
         {texto}
       </Text>

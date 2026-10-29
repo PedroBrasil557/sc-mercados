@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { MarcaDaRede } from "@/componentes/MarcaDaRede";
 import { Botao } from "@/componentes/Botao";
 import { Icone } from "@/componentes/Icone";
 import { LinhaDeMercado } from "@/componentes/LinhaDeMercado";
@@ -186,9 +187,7 @@ export default function Comparar() {
 
       {dados.redes_sem_preco.slice(0, 2).map((r) => (
         <View key={r.rede} style={[estilos.emBreve, { borderColor: cor.bordaPadrao }]}>
-          <View style={[estilos.monograma, { backgroundColor: cor.fundoAfundado }]}>
-            <Text style={[fonte("precoMedio"), { color: cor.textoSuave }]}>{r.rede.charAt(0)}</Text>
-          </View>
+          <MarcaDaRede rede={r.rede} />
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={[fonte("corpoForte"), { color: cor.textoSuave }]}>{r.rede}</Text>
             <Text style={[fonte("legenda"), { color: cor.textoSuave }]}>Em breve: preços pelos cupons que você lê</Text>
@@ -254,7 +253,6 @@ const estilos = StyleSheet.create({
   melhor: { borderRadius: 28, padding: 20, gap: 10 },
   divisor: { height: 1 },
   emBreve: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 16, borderWidth: 1.5, borderStyle: "dashed" },
-  monograma: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   cartao: { padding: 16, borderRadius: 20, borderWidth: 1, gap: 8 },
   titulo: { flexDirection: "row", alignItems: "center", gap: 8 },
   valores: { flexDirection: "row", alignItems: "baseline", gap: 12 },

@@ -5,6 +5,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, Vie
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { Mercado } from "@/api/cliente";
+import { MarcaDaRede } from "@/componentes/MarcaDaRede";
 import { Botao } from "@/componentes/Botao";
 import { Icone } from "@/componentes/Icone";
 import { km } from "@/formatar";
@@ -70,6 +71,7 @@ export default function SeuMercado() {
                 <View style={[estilos.radio, marcado ? { backgroundColor: cor.estadoEconomia } : { borderColor: cor.bordaForte, borderWidth: 1.5 }]}>
                   {marcado ? <Icone nome="ok" cor={cor.textoInverso} tamanho={16} /> : null}
                 </View>
+                <MarcaDaRede rede={l.rede} tamanho={32} />
                 <View style={{ flex: 1, gap: 2 }}>
                   <Text style={[fonte("corpoForte"), { color: cor.textoPrincipal }]}>{l.nome}</Text>
                   <Text style={[fonte("legenda"), { color: cor.textoSuave }]}>
@@ -92,6 +94,7 @@ export default function SeuMercado() {
             <View style={[estilos.caixa, { borderColor: cor.bordaPadrao, opacity: 0.7 }]}>
               {semPreco.map((l, i) => (
                 <View key={l.loja_id} style={[estilos.linha, i > 0 && { borderTopWidth: 1, borderColor: cor.bordaPadrao }]}>
+                  <MarcaDaRede rede={l.rede} tamanho={32} />
                   <View style={{ flex: 1, gap: 2 }}>
                     <Text style={[fonte("corpoForte"), { color: cor.textoPrincipal }]}>{l.nome}</Text>
                     <Text style={[fonte("legenda"), { color: cor.textoSuave }]}>{TIPO.sem}</Text>
