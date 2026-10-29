@@ -37,7 +37,8 @@ AGENTES = [
     Agente(
         "leitor_encartes",
         "Leitor de encartes",
-        "Lê os encartes do Fort Atacadista, casa cada item com o catálogo e cadastra produtos novos achados nos sites.",
+        "Lê os encartes do Fort Atacadista e do Komprão (este por OCR), casa cada item com o catálogo e cadastra "
+        "produtos novos achados nos sites.",
         "Todo dia às 7h (encarte já lido é pulado)",
         "Roda e publica sozinho. Item que não casou vai para o Revisor.",
         timedelta(hours=26),
