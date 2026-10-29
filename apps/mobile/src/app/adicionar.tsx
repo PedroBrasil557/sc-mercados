@@ -14,7 +14,7 @@ import { LeitorDeCodigo } from "@/componentes/LeitorDeCodigo";
 import { Miniatura } from "@/componentes/Miniatura";
 import { PainelInferior } from "@/componentes/PainelInferior";
 import { SeletorDeMercado } from "@/componentes/SeletorDeMercado";
-import { km, reais, tamanho } from "@/formatar";
+import { km, marca, reais, tamanho } from "@/formatar";
 import { adicionarProduto, buscarProdutos, useLista } from "@/lista/sincronia";
 import { fonte, useTema } from "@/tema";
 
@@ -104,8 +104,8 @@ export default function Adicionar() {
 
   const cabecalho = (
     <View style={{ gap: 12, paddingBottom: 8 }}>
-      <SeletorDeMercado prefixo="Preços do seu mercado" />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={estilos.chips} keyboardShouldPersistTaps="handled">
+      <SeletorDeMercado />
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={estilos.fileira} contentContainerStyle={estilos.chips} keyboardShouldPersistTaps="handled">
         <Chip texto={ativos ? `Filtros · ${ativos}` : "Filtros"} ativo={ativos > 0} aoTocar={() => setPainel(true)} />
         <Chip texto="Seu mercado" ativo={filtros.onde === "seu"} aoTocar={() => alternar("onde", "seu")} />
         <Chip texto="Em oferta" ativo={!!filtros.oferta} aoTocar={() => mudar({ oferta: !filtros.oferta })} />
@@ -257,7 +257,7 @@ export default function Adicionar() {
             return (
               <LinhaDeResultado
                 nome={item.nome_curto}
-                detalhe={[item.marca, item.tamanho_texto, item.preco_por_unidade].filter(Boolean).join(" · ")}
+                detalhe={[marca(item.marca), item.tamanho_texto, item.preco_por_unidade].filter(Boolean).join(" · ")}
                 nota={ja ? `Na lista · ${ja.quantidade}` : nota}
                 notaDestaque={!!ja || !!item.desconto_pct}
                 preco={item.preco_centavos}
@@ -436,7 +436,8 @@ const estilos = StyleSheet.create({
   codigo: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
   campo: { flex: 1, paddingVertical: 0 },
   lista: { paddingHorizontal: 20, paddingBottom: 120 },
-  chips: { gap: 8, paddingRight: 20 },
+  chips: { gap: 8, paddingHorizontal: 20 },
+  fileira: { marginHorizontal: -20 },
   chipsQuebra: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   entendido: { padding: 12, borderRadius: 14 },
   grupo: { flexDirection: "row", alignItems: "center", gap: 12, padding: 12, paddingHorizontal: 16, borderRadius: 14, borderWidth: 1 },

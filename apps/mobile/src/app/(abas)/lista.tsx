@@ -131,7 +131,7 @@ export default function Lista() {
           </Text>
         </View>
       ) : null}
-      <SeletorDeMercado prefixo="Preços do seu mercado" />
+      <SeletorDeMercado />
       {aComprar.length && totalAqui !== null ? (
         <Pressable
           accessibilityRole="button"

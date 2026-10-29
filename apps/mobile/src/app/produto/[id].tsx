@@ -14,7 +14,7 @@ import { Miniatura } from "@/componentes/Miniatura";
 import { PainelPrecoDiferente } from "@/componentes/PainelPrecoDiferente";
 import { SeloDeFonte } from "@/componentes/SeloDeFonte";
 import { confirmar } from "@/componentes/Confirmacao";
-import { km, quantidade, reais, seloDeFonte, tamanho } from "@/formatar";
+import { km, marca, quantidade, reais, seloDeFonte, tamanho } from "@/formatar";
 import { custoKm } from "@/lista/comparacao";
 import { adicionarProduto, useLista } from "@/lista/sincronia";
 import { fonte, useTema } from "@/tema";
@@ -95,7 +95,7 @@ export default function Produto() {
                   {p?.nome_curto ?? p?.nome}
                 </Text>
                 <Text style={[fonte("corpoPadrao"), { color: cor.textoSuave }]}>
-                  {[p?.marca, tamanho(p?.tamanho ?? null, p?.unidade ?? null)].filter(Boolean).join(" · ")}
+                  {[marca(p?.marca), tamanho(p?.tamanho ?? null, p?.unidade ?? null)].filter(Boolean).join(" · ")}
                 </Text>
                 {p?.ean ? <SeloDeFonte texto={`EAN ${p.ean.replace(/^0+/, "")}`} /> : null}
               </View>

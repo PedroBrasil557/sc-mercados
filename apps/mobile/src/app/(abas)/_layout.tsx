@@ -1,6 +1,6 @@
 import { Redirect } from "expo-router";
 import { TabList, TabSlot, TabTrigger, Tabs } from "expo-router/ui";
-import { StyleSheet } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BotaoDeAba } from "@/componentes/BotaoDeAba";
@@ -16,6 +16,7 @@ export default function AbasLayout() {
   return (
     <Tabs>
       <TabSlot />
+      <View pointerEvents="none" style={[estilos.status, { height: margem.top, backgroundColor: cor.fundoTela }]} />
       <TabList
         accessibilityRole="tablist"
         style={[estilos.barra, { backgroundColor: cor.fundoSuperficie, borderTopColor: cor.bordaPadrao, paddingBottom: margem.bottom }]}
@@ -41,5 +42,6 @@ export default function AbasLayout() {
 }
 
 const estilos = StyleSheet.create({
+  status: { position: "absolute", top: 0, left: 0, right: 0 },
   barra: { flexDirection: "row", borderTopWidth: StyleSheet.hairlineWidth },
 });

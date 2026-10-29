@@ -69,14 +69,14 @@ export default function Ofertas() {
           </Text>
           <Text style={[fonte("corpoMenor"), { color: cor.textoSuave }]}>Só entra quando o preço caiu de verdade. Do mais perto para o mais longe.</Text>
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={estilos.chips}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={estilos.fileira} contentContainerStyle={estilos.chips}>
           <Chip texto="Perto de você" ativo={onde === "perto"} aoTocar={() => setOnde("perto")} />
           <Chip texto="Seu mercado" ativo={onde === "seu"} aoTocar={() => setOnde("seu")} />
           <Chip texto={`Da sua lista · ${minhas}`} ativo={onde === "lista"} aoTocar={() => setOnde("lista")} />
           <Chip texto="Todas" ativo={onde === "todas"} aoTocar={() => setOnde("todas")} />
         </ScrollView>
         {categorias.length > 1 ? (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={estilos.chips}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={estilos.fileira} contentContainerStyle={estilos.chips}>
             <Chip texto="Tudo" ativo={!categoria} aoTocar={() => setCategoria(null)} />
             {categorias.map((c) => (
               <Chip key={c} texto={CATEGORIAS[c]!} ativo={categoria === c} aoTocar={() => setCategoria(categoria === c ? null : c)} />
@@ -167,7 +167,9 @@ function pares<T>(lista: T[]): T[][] {
 const estilos = StyleSheet.create({
   tela: { flex: 1 },
   conteudo: { paddingHorizontal: 20, paddingBottom: 32, gap: 14 },
-  chips: { gap: 8, paddingRight: 20 },
+  // A fileira corre até a borda da tela (sai da margem de 20) e o primeiro chip fica alinhado ao conteúdo.
+  chips: { gap: 8, paddingHorizontal: 20 },
+  fileira: { marginHorizontal: -20 },
   titulo: { flexDirection: "row", alignItems: "center", gap: 8 },
   duas: { flexDirection: "row", gap: 12 },
   promo: { flexDirection: "row", alignItems: "center", borderRadius: 18, padding: 16, gap: 12, marginTop: 8 },

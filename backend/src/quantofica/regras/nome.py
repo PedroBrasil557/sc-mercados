@@ -63,11 +63,15 @@ def nome_curto(nome: str, marca: str | None) -> str:
         saida.append(resto.pop(0))
     elif len(resto) >= 2 and _sem_acento(resto[0]) in ("de", "em", "para") and _sem_acento(resto[1]) in COMPOSTOS:
         saida += [resto.pop(0), resto.pop(0)]
-    for w in resto:
+    base = len(saida)
+    for i, w in enumerate(resto):
         n = _sem_acento(w)
         if n in marca_n or n in EMBALAGEM or _TAMANHO.match(n):
             continue
         if n in CARACTERISTICAS and n not in ("com", "sem"):
+            # "Óleo de soja", "Leite em pó": o "de"/"em" logo antes da primeira característica fica
+            if len(saida) == base and i > 0 and _sem_acento(resto[i - 1]) in ("de", "em"):
+                saida.append(resto[i - 1])
             saida.append(w)
         elif n in ("com", "sem") and len(saida) < 4:
             saida.append(w)

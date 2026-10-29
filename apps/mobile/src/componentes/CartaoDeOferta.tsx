@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { Oferta } from "@/api/cliente";
-import { reais, tamanho } from "@/formatar";
+import { marca, reais, tamanho } from "@/formatar";
 import { fonte, useTema } from "@/tema";
 
 import { Icone } from "./Icone";
@@ -12,7 +12,7 @@ import { Miniatura } from "./Miniatura";
 export function CartaoDeOferta({ oferta, aoTocar, aoPor }: { oferta: Oferta; aoTocar: () => void; aoPor?: () => void }) {
   const { cor } = useTema();
   const p = oferta.produto;
-  const nome = p.nome_curto ? `${p.nome_curto}${p.marca ? ` ${p.marca}` : ""} ${tamanho(p.tamanho, p.unidade) ?? ""}`.trim() : p.nome;
+  const nome = p.nome_curto ? `${p.nome_curto}${p.marca ? ` ${marca(p.marca)}` : ""} ${tamanho(p.tamanho, p.unidade) ?? ""}`.trim() : p.nome;
   const encarte = oferta.fonte === "encarte";
   return (
     <Pressable

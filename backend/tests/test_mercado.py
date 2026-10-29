@@ -24,6 +24,8 @@ class TestNome:
             ("Creme de Leite Nestlé Caixa 200g", "Nestlé", "Creme de leite"),
             ("Sabão em pó Omo 2,2kg", "Omo", "Sabão em pó"),
             ("Lava-Roupas Líquido Omo Galão 3l", "Omo", "Lava roupas líquido"),
+            ("Óleo de Soja Soya Garrafa 900ml", "Soya", "Óleo de soja"),
+            ("Leite em Pó Integral Piracanjuba 380g", "Piracanjuba", "Leite em pó integral"),
         ],
     )
     def test_nome_curto(self, nome, marca, curto):
@@ -189,3 +191,21 @@ def test_inicio_resume_a_casa(api, eu):
     assert r["status"]["produtos"] == 5
     assert any(b["nome"].startswith("Feijão carioca") for b in r["basicos"])
     assert r["atividade"] == []  # só aparece o que os outros da casa fizeram
+
+
+def test_loja_sem_preco_mais_perto_nao_representa_a_rede(api, dados, eu, banco_url):
+    # Caso real (29/10): uma Cooper do OpenStreetMap, sem preço, mais perto que a Cooper com preço fazia a
+    # comparação dizer "Cooper: em breve" enquanto a Lista mostrava os preços do Cooper.
+    with psycopg.connect(banco_url, autocommit=True) as c:
+        c.execute(
+            "insert into loja (id, rede_id, cidade_id, nome, lat, lon, origem) "
+            "values (%s, %s, %s, 'Cooper Sem Preço', %s, %s, 'openstreetmap')",
+            (uuid4(), dados["cooper"], dados["cidade"], -26.8601, -49.0901),
+        )
+    r = api.post(
+        "/v1/comparar",
+        headers=eu["h"],
+        json={"bairro_id": str(dados["bairro"]), "itens": {str(dados["kicaldo"]): 1}, "custo_km_centavos": 0},
+    ).json()
+    assert "Cooper Itoupavazinha" in [lj["nome"] for lj in r["lojas"]]
+    assert "Cooper" not in [s["rede"] for s in r["redes_sem_preco"]]
