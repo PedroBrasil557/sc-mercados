@@ -41,6 +41,14 @@
   .preco { font-variant-numeric: tabular-nums; font-weight: 600; }
   .barra { position: sticky; bottom: 0; background: var(--sup); border: 1px solid var(--borda); border-radius: 12px; padding: 10px 14px; display: flex; gap: 8px; align-items: center; margin-top: 12px; }
   .entrar { max-width: 380px; margin: 12vh auto; }
+  .sugestao { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--verde-suave); border-left: 4px solid var(--verde); }
+  .sugestao.duvida { background: var(--fundo); border-left-color: var(--borda); }
+  .saude { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--verde-suave); color: var(--verde); }
+  .saude.ruim { background: var(--perigo-suave); color: var(--perigo); }
+  .agente { margin-bottom: 12px; }
+  .agente dl { display: grid; grid-template-columns: 110px 1fr; gap: 4px 12px; margin: 10px 0 0; font-size: 14px; }
+  .agente dt { color: var(--suave); }
+  .agente dd { margin: 0; }
   .aviso { padding: 10px 14px; border-radius: 10px; background: var(--verde-suave); margin: 10px 0; }
   .aviso.erro { background: var(--perigo-suave); color: var(--perigo); }
   a { color: var(--verde); }
@@ -54,6 +62,7 @@
     <button type="button" data-aba="resumo" aria-pressed="true">Resumo</button>
     <button type="button" data-aba="revisao" aria-pressed="false">Revisão</button>
     <button type="button" data-aba="lojas" aria-pressed="false">Lojas</button>
+    <button type="button" data-aba="agentes" aria-pressed="false">Agentes</button>
     <button type="button" id="sair">Sair</button>
   </nav>
 </header>
@@ -67,6 +76,7 @@
   <section id="resumo" hidden></section>
   <section id="revisao" hidden></section>
   <section id="lojas" hidden></section>
+  <section id="agentes" hidden></section>
 </main>
 <script nonce="{{NONCE}}">
 "use strict";
@@ -96,11 +106,11 @@ async function api(caminho, opcoes = {}) {
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || `Erro ${r.status}`);
   return r.json();
 }
-function sair() { token = ""; sessionStorage.removeItem("painel"); $("#abas").hidden = true; for (const s of ["#resumo", "#revisao", "#lojas"]) $(s).hidden = true; $("#entrar").hidden = false; }
+function sair() { token = ""; sessionStorage.removeItem("painel"); $("#abas").hidden = true; for (const s of ["#resumo", "#revisao", "#lojas", "#agentes"]) $(s).hidden = true; $("#entrar").hidden = false; }
 function mostrar(aba) {
   for (const b of document.querySelectorAll("#abas [data-aba]")) b.setAttribute("aria-pressed", String(b.dataset.aba === aba));
-  for (const s of ["resumo", "revisao", "lojas"]) $("#" + s).hidden = s !== aba;
-  ({ resumo: carregarResumo, revisao: carregarRevisao, lojas: carregarLojas })[aba]();
+  for (const s of ["resumo", "revisao", "lojas", "agentes"]) $("#" + s).hidden = s !== aba;
+  ({ resumo: carregarResumo, revisao: carregarRevisao, lojas: carregarLojas, agentes: carregarAgentes })[aba]();
 }
 function aviso(alvo, texto, erro = false) { alvo.prepend(el("div", { class: "aviso" + (erro ? " erro" : ""), role: "status" }, texto)); }
 
@@ -178,11 +188,64 @@ function cartaoDeRevisao(it, marcados, atualizar, decidir) {
     corpo.append(el("h3", {}, TIPOS[it.tipo] || it.tipo), el("div", {}, it.motivo), el("div", { class: "suave" }, it.referencia_id),
       p.preco_centavos ? el("div", { class: "suave" }, `Preço proposto: ${reais(p.preco_centavos)}`) : null);
   }
+  if (it.sugestao) corpo.append(caixaDeSugestao(it, decidir));
   corpo.append(el("div", { class: "acoes" },
     el("button", { class: "botao", onclick: () => decidir([it.id], "resolvida") }, "Resolvido"),
     el("button", { class: "botao perigo", onclick: () => decidir([it.id], "descartada") }, it.tipo === "encarte" ? "Não é de mercado / descartar" : "Descartar"),
     el("span", { class: "suave" }, quando(it.criada_em))));
   return el("article", { class: "item" }, caixa, corpo);
+}
+
+const ACOES = { descartar: "descartar", resolver: "marcar como resolvido", ligar: "ligar ao produto", sugerir: "sugere", humano: "precisa de você" };
+function caixaDeSugestao(it, decidir) {
+  const s = it.sugestao, conf = Math.round((it.sugestao_confianca || 0) * 100);
+  const produtos = s.produtos || [];
+  let aceitar = null;
+  if (it.tipo === "encarte" && produtos.length) {
+    aceitar = el("button", { class: "botao primario", onclick: async (ev) => {
+      ev.target.disabled = true;
+      try { await api(`/v1/painel/revisao/${it.id}/ligar`, { method: "POST", body: JSON.stringify({ produto_ids: produtos.map((x) => x.id) }) }); await carregarRevisao(); }
+      catch (e) { ev.target.disabled = false; alert(e.message); } } }, produtos.length > 1 ? "Aceitar: ligar aos sugeridos" : "Aceitar: ligar a este produto");
+  } else if (s.acao === "sugerir" || s.acao === "resolver") {
+    aceitar = el("button", { class: "botao primario", onclick: () => decidir([it.id], "resolvida") }, "Aceitar: marcar como resolvido");
+  } else if (s.acao === "descartar") {
+    aceitar = el("button", { class: "botao primario", onclick: () => decidir([it.id], "descartada") }, "Aceitar: descartar");
+  }
+  return el("div", { class: "sugestao" + (s.acao === "humano" ? " duvida" : "") },
+    el("div", {}, el("strong", {}, "Revisor: "), s.motivo),
+    produtos.length ? el("ul", {}, produtos.map((x) => el("li", {}, x.nome))) : null,
+    el("div", { class: "suave" }, `Confiança ${conf}% · conferiu: ${(s.conferido || []).join(", ") || "—"} · ${quando(it.sugestao_em)}`),
+    aceitar ? el("div", { class: "acoes" }, aceitar) : null);
+}
+
+async function carregarAgentes() {
+  const s = $("#agentes"); s.replaceChildren(el("p", { class: "suave" }, "Carregando…"));
+  try {
+    const r = await api("/v1/painel/agentes");
+    const duracao = (a, b) => (a && b) ? `${Math.max(1, Math.round((new Date(b) - new Date(a)) / 60000))} min` : "—";
+    const resumo = (o) => Object.entries(o || {}).map(([k, v]) => `${k.replaceAll("_", " ")}: ${typeof v === "object" ? Object.entries(v).map(([a, b]) => `${a} ${b}`).join(", ") : v}`).join(" · ") || "—";
+    s.replaceChildren(
+      el("p", { class: "suave" }, "Todos os agentes hoje são programas de regras: rodam sozinhos no horário marcado, sem IA e sem custo. Cada rodada e cada decisão ficam registradas aqui."),
+      r.agentes.map((a) => {
+        const u = a.rodadas[0];
+        return el("article", { class: "cartao agente" },
+          el("div", {}, el("strong", {}, a.nome), " ", el("span", { class: "saude" + (["em dia", "trabalhando agora"].includes(a.saude) ? "" : " ruim") }, a.saude)),
+          el("div", {}, a.faz),
+          el("dl", {},
+            el("dt", {}, "Tipo"), el("dd", {}, a.tipo),
+            el("dt", {}, "Autonomia"), el("dd", {}, a.autonomia),
+            el("dt", {}, "Quando roda"), el("dd", {}, a.agenda),
+            el("dt", {}, "Última rodada"), el("dd", {}, u ? `${quando(u.iniciada_em)} · ${duracao(u.iniciada_em, u.terminada_em)} · ${u.status}` : "ainda não rodou"),
+            el("dt", {}, "O que fez"), el("dd", {}, u ? resumo(u.resumo) : "—", u && u.erro ? el("div", { class: "falhou" }, u.erro.slice(0, 200)) : null),
+            el("dt", {}, "Últimos dias"), el("dd", {}, a.rodadas.map((x) => x.status === "ok" ? "●" : x.status === "falhou" ? "✕" : "…").join(" ") || "—")));
+      }),
+      el("h2", {}, "Últimas decisões do Revisor"),
+      r.decisoes.length ? el("table", {}, el("thead", {}, el("tr", {}, ["Quando", "Item", "Decisão", "Confiança", "Motivo"].map((h) => el("th", {}, h)))),
+        el("tbody", {}, r.decisoes.map((d) => el("tr", {},
+          el("td", {}, quando(d.criada_em)), el("td", {}, (d.item || "").slice(0, 70)),
+          el("td", {}, d.saida.aplicada ? el("span", { class: "ok" }, `fez sozinho: ${ACOES[d.saida.acao] || d.saida.acao}`) : (ACOES[d.saida.acao] || d.saida.acao)),
+          el("td", {}, `${Math.round(d.confianca * 100)}%`), el("td", {}, d.saida.motivo))))) : el("p", { class: "suave" }, "O Revisor ainda não rodou."));
+  } catch (e) { s.replaceChildren(); aviso(s, e.message, true); }
 }
 
 function ligador(it, p) {

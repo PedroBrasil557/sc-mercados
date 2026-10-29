@@ -7,13 +7,14 @@ essa variável o painel não existe (404). Tentativas com token errado são limi
 import hashlib
 import hmac
 import os
-from datetime import UTC, date, datetime, time
+from datetime import UTC, datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
+from ..agentes import AGENTES
 from ..coleta import fort
 from .banco import Conexao
 from .limite import LimiteDeTaxa
@@ -73,12 +74,64 @@ def revisao(
     tipo: Annotated[Literal[TIPOS] | None, Query()] = None,  # type: ignore[valid-type]
     limite: Annotated[int, Query(ge=1, le=200)] = 100,
 ):
-    return conn.execute(
-        """select id, tipo, referencia_id, motivo, proposta_agente as proposta, prioridade, criada_em
-           from fila_revisao where status = 'aberta' and (%s::text is null or tipo = %s)
-           order by prioridade, criada_em limit %s""",
+    itens = conn.execute(
+        """select f.id, f.tipo, f.referencia_id, f.motivo, f.proposta_agente as proposta, f.prioridade, f.criada_em,
+                  s.saida as sugestao, s.confianca as sugestao_confianca, s.criada_em as sugestao_em
+           from fila_revisao f
+           left join lateral (select e.saida, e.confianca, e.criada_em from execucao_agente e
+                              where e.entrada_ref = f.id::text and e.agente = 'revisor'
+                              order by e.criada_em desc limit 1) s on true
+           where f.status = 'aberta' and (%s::text is null or f.tipo = %s)
+           order by (s.saida->>'acao' = 'sugerir') desc nulls last, f.prioridade, f.criada_em limit %s""",
         (tipo, tipo, limite),
     ).fetchall()
+    # Nome dos produtos que o Revisor sugeriu, para mostrar na tela
+    ids = {pid for i in itens if i["sugestao"] for pid in i["sugestao"].get("produtos") or []}
+    nomes = {}
+    if ids:
+        nomes = {
+            str(r["id"]): r["nome_humano"]
+            for r in conn.execute("select id, nome_humano from produto where id::text = any(%s)", (list(ids),)).fetchall()
+        }
+    for i in itens:
+        if i["sugestao"]:
+            i["sugestao"]["produtos"] = [{"id": pid, "nome": nomes.get(pid, pid)} for pid in i["sugestao"].get("produtos") or []]
+    return itens
+
+
+@router.get("/agentes")
+def agentes(conn: Conexao):
+    """Cada agente: o que faz, se é IA ou programa, se age sozinho, a última rodada e se está em dia."""
+    agora = datetime.now(UTC)
+    saida = []
+    for a in AGENTES:
+        rodadas = conn.execute(
+            """select iniciada_em, terminada_em, status, resumo, erro from agente_rodada
+               where agente = %s order by iniciada_em desc limit 7""",
+            (a.id,),
+        ).fetchall()
+        ultima = rodadas[0] if rodadas else None
+        if ultima is None:
+            saude = "nunca rodou"
+        elif ultima["status"] == "rodando":
+            saude = "trabalhando agora"
+        elif ultima["status"] == "falhou":
+            saude = "falhou na última rodada"
+        elif agora - ultima["iniciada_em"] > a.intervalo:
+            saude = "atrasado"
+        else:
+            saude = "em dia"
+        saida.append({
+            "id": a.id, "nome": a.nome, "faz": a.faz, "tipo": a.tipo, "agenda": a.agenda, "autonomia": a.autonomia,
+            "saude": saude, "rodadas": rodadas,
+        })  # fmt: skip
+    decisoes = conn.execute(
+        """select e.criada_em, e.saida, e.confianca, e.decisao, f.tipo, f.motivo,
+                  coalesce(f.proposta_agente->>'nome', f.referencia_id) as item
+           from execucao_agente e left join fila_revisao f on f.id::text = e.entrada_ref
+           where e.agente = 'revisor' order by e.criada_em desc limit 60"""
+    ).fetchall()
+    return {"agentes": saida, "decisoes": decisoes}
 
 
 class Decisao(BaseModel):
@@ -109,43 +162,13 @@ def ligar(item_id: UUID, ligacao: Ligacao, conn: Conexao):
         ).fetchone()
         if item is None or item["tipo"] != "encarte" or not item["p"]:
             raise HTTPException(404, "item de encarte aberto não encontrado")
-        p = item["p"]
-        rede_id = conn.execute("select id from rede where nome = %s", (fort.REDE,)).fetchone()["id"]
         existentes = {
             str(r["id"]) for r in conn.execute("select id from produto where id = any(%s)", (ligacao.produto_ids,)).fetchall()
         }
         if len(existentes) != len(set(ligacao.produto_ids)):
             raise HTTPException(422, "produto não encontrado")
-        valido_ate = _validade(conn, rede_id, p)
-        precos = 0
-        hoje = datetime.now(UTC).astimezone(fort.FUSO).date()
-        if valido_ate and valido_ate >= hoje:  # encarte vencido: só lembra o nome, não publica preço velho
-            limite = datetime.combine(valido_ate, time(23, 59, 59), fort.FUSO)
-            lojas = fort.lojas_da_cidade(conn, rede_id)
-            for produto in existentes:
-                precos += fort.gravar_precos(
-                    conn, produto, lojas, p["preco_centavos"], p.get("condicional_centavos"),
-                    datetime.now(UTC), limite, f"fort:painel:{item_id}",
-                )  # fmt: skip
-        for produto in existentes:
-            conn.execute(
-                "insert into nome_no_encarte (rede_id, nome, produto_id) values (%s, %s, %s) on conflict do nothing",
-                (rede_id, fort.nome_normalizado(p["nome"]), produto),
-            )
-        conn.execute(
-            "update fila_revisao set status = 'resolvida', revisado_por = 'painel', decidido_em = now() where id = %s",
-            (item_id,),
-        )
+        precos, valido_ate = fort.ligar_item(conn, str(item_id), item["p"], sorted(existentes), "painel", datetime.now(UTC))
     return {"precos": precos, "valido_ate": valido_ate}
-
-
-def _validade(conn, rede_id, proposta: dict) -> date | None:
-    if proposta.get("valido_ate"):
-        return date.fromisoformat(proposta["valido_ate"])
-    linha = conn.execute(  # itens abertos antes de a proposta guardar a validade
-        "select valido_ate from encarte_lido where rede_id = %s and titulo = %s", (rede_id, proposta.get("encarte"))
-    ).fetchone()
-    return linha["valido_ate"] if linha else None
 
 
 @router.get("/produtos")

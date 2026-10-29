@@ -48,6 +48,15 @@ def extrair(nome: str) -> Tamanho | None:
     return Tamanho(round(valor * fator, 3), unidade)
 
 
+def todos(nome: str) -> list[Tamanho]:
+    """Todos os tamanhos do nome ("Nescau Protein 15g de Proteínas 250ml" -> 15 g e 250 ml)."""
+    saida = []
+    for valor, sufixo in _RE_TAMANHO.findall(_simplificar(nome)):
+        unidade, fator = _UNIDADES[sufixo]
+        saida.append(Tamanho(round(float(valor.replace(",", ".")) * fator, 3), unidade))
+    return saida
+
+
 def embalagem_multipla(nome: str) -> bool:
     """Pack, kit, fardo, "leve X pague Y", "N x 500 g" ou "N unidades de 120 g cada".
 

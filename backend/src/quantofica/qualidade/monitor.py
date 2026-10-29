@@ -67,9 +67,11 @@ def coletor_parado(
 
 
 def abrir_revisao(conn, tipo: str, anomalia: Anomalia, proposta=None) -> bool:
-    """Abre um item na fila de revisão, a menos que já exista um aberto igual. Devolve se abriu."""
+    """Abre um item na fila de revisão, a menos que já exista um igual aberto ou decidido há menos de
+    30 dias (senão o que o revisor ou o painel fechou voltaria na coleta do dia seguinte). Devolve se abriu."""
     ja_tem = conn.execute(
-        "select 1 from fila_revisao where tipo = %s and referencia_id = %s and motivo = %s and status = 'aberta'",
+        """select 1 from fila_revisao where tipo = %s and referencia_id = %s and motivo = %s
+           and (status = 'aberta' or decidido_em > now() - interval '30 days')""",
         (tipo, anomalia.referencia, anomalia.motivo),
     ).fetchone()
     if ja_tem:
