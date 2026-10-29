@@ -22,6 +22,9 @@ const MIGRACOES = [
    create table sessao (chave text primary key, valor text not null);
    create table produto_cache (id text primary key, nome text not null, marca text, tamanho text, unidade text, categoria text not null);`,
   `alter table item_info add column tamanho text; alter table item_info add column unidade text;`,
+  `alter table operacao add column qualquer_marca integer not null default 0;
+   alter table item_info add column qualquer_marca integer not null default 0;
+   alter table item_info add column nome_curto text;`,
 ];
 
 const versao = db.getFirstSync<{ user_version: number }>("pragma user_version")?.user_version ?? 0;
@@ -82,9 +85,10 @@ type LinhaOperacao = {
 
 export function gravarLocal(listaId: string, op: Operacao): void {
   db.runSync(
-    `insert or ignore into operacao (id, lista_id, item_id, tipo, valor, feita_em, membro_id, produto_id, categoria_id, enviada)
-     values (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+    `insert or ignore into operacao (id, lista_id, item_id, tipo, valor, feita_em, membro_id, produto_id, categoria_id, qualquer_marca, enviada)
+     values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
     op.id, listaId, op.item_id, op.tipo, op.valor ?? null, op.feita_em, op.membro_id ?? null, op.produto_id ?? null, op.categoria_id ?? null,
+    op.qualquer_marca ? 1 : 0,
   );
 }
 
@@ -105,11 +109,17 @@ export function gravarRecebidas(listaId: string, ops: (Operacao & { seq: number 
 
 export function pendentes(listaId: string): Operacao[] {
   return db
-    .getAllSync<LinhaOperacao>(
-      "select id, item_id, tipo, valor, feita_em, membro_id, produto_id, categoria_id from operacao where lista_id = ? and enviada = 0 order by feita_em, id",
+    .getAllSync<LinhaOperacao & { qualquer_marca: number }>(
+      "select id, item_id, tipo, valor, feita_em, membro_id, produto_id, categoria_id, qualquer_marca from operacao where lista_id = ? and enviada = 0 order by feita_em, id",
       listaId,
     )
-    .map((o) => ({ ...o, valor: o.valor ?? undefined, produto_id: o.produto_id ?? undefined, categoria_id: o.categoria_id ?? undefined }));
+    .map((o) => ({
+      ...o,
+      valor: o.valor ?? undefined,
+      produto_id: o.produto_id ?? undefined,
+      categoria_id: o.categoria_id ?? undefined,
+      qualquer_marca: o.qualquer_marca ? true : undefined,
+    }));
 }
 
 export function marcarEnviadas(ids: string[]): void {
@@ -136,22 +146,29 @@ export type InfoDoItem = {
   categoria: string | null;
   tamanho?: string | null;
   unidade?: string | null;
+  nome_curto?: string | null;
+  qualquer_marca?: boolean;
 };
 
 export function gravarInfo(listaId: string, info: InfoDoItem[]): void {
   db.withTransactionSync(() => {
     for (const i of info) {
       db.runSync(
-        "insert or replace into item_info (item_id, lista_id, produto_id, nome, marca, categoria, tamanho, unidade) values (?, ?, ?, ?, ?, ?, ?, ?)",
-        i.item_id, listaId, i.produto_id, i.nome, i.marca, i.categoria, i.tamanho ?? null, i.unidade ?? null,
+        `insert or replace into item_info (item_id, lista_id, produto_id, nome, marca, categoria, tamanho, unidade, nome_curto, qualquer_marca)
+         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        i.item_id, listaId, i.produto_id, i.nome, i.marca, i.categoria, i.tamanho ?? null, i.unidade ?? null, i.nome_curto ?? null,
+        i.qualquer_marca ? 1 : 0,
       );
     }
   });
 }
 
 export function infos(listaId: string): Map<string, InfoDoItem> {
-  const linhas = db.getAllSync<InfoDoItem>("select item_id, produto_id, nome, marca, categoria, tamanho, unidade from item_info where lista_id = ?", listaId);
-  return new Map(linhas.map((l) => [l.item_id, l]));
+  const linhas = db.getAllSync<Omit<InfoDoItem, "qualquer_marca"> & { qualquer_marca: number }>(
+    "select item_id, produto_id, nome, marca, categoria, tamanho, unidade, nome_curto, qualquer_marca from item_info where lista_id = ?",
+    listaId,
+  );
+  return new Map(linhas.map((l) => [l.item_id, { ...l, qualquer_marca: !!l.qualquer_marca }]));
 }
 
 // ---------- Catálogo guardado (busca sem internet) ----------

@@ -13,10 +13,12 @@ import { PainelRecuperacao } from "@/componentes/PainelRecuperacao";
 import { PainelInferior } from "@/componentes/PainelInferior";
 import { SeletorDeBairro } from "@/componentes/SeletorDeBairro";
 import { custoKm, definirCustoKm, lojasPreferidas, OPCOES_DE_VIAGEM, useComparacao } from "@/lista/comparacao";
+import { useMercados } from "@/lista/mercado";
 import { trocarApelido, trocarBairro, useLista } from "@/lista/sincronia";
 import { fonte, useTema } from "@/tema";
 
 export default function Perfil() {
+  const mercados = useMercados();
   const { cor } = useTema();
   const margem = useSafeAreaInsets();
   const { sessao } = useLista();
@@ -58,6 +60,12 @@ export default function Perfil() {
           titulo={sessao.bairro_nome ?? "Escolher o bairro"}
           detalhe="Usamos só o bairro, nunca sua localização"
           aoTocar={() => setEscolhendoBairro(true)}
+        />
+        <Linha
+          icone="loja"
+          titulo={mercados?.seu_mercado ? `Seu mercado: ${mercados.seu_mercado.nome}` : "Seu mercado"}
+          detalhe={mercados?.automatico ? "O mais perto com preço do site (automático)" : "Escolhido pela casa. Os preços começam por ele"}
+          aoTocar={() => router.push("/seu-mercado")}
         />
         <Linha
           icone="loja"

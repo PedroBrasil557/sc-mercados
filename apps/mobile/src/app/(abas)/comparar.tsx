@@ -1,4 +1,5 @@
-/** 05 Comparar: quanto fica a lista na loja mais perto de cada rede (R7, R8, R13, R14). */
+/** R7 Comparar: a recomendação com o porquê, o total de cada mercado já com a ida e volta (R8), dividir a compra,
+ * o que pegar nos itens "qualquer marca" e as lojas com só alguns itens (R7, R13, R14). */
 import { router } from "expo-router";
 import { useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -71,13 +72,21 @@ export default function Comparar() {
   const maisBarata = lojas[0];
   const menorPrateleira = Math.min(...lojas.map((l) => l.total_centavos));
   const etiqueta = maisBarata && maisBarata.total_centavos <= menorPrateleira ? "Mais barato" : "Melhor para você";
-  const maisCara = [...lojas].sort((a, b) => b.total_centavos - a.total_centavos)[0];
   const poucos = dados.lojas_com_poucos_itens ?? [];
   const foraDaSoma = dados.itens - dados.comuns;
   const nomeDaRede = (id: string) => lojas.find((l) => l.loja_id === id)?.rede ?? "";
   const subtitulo = lojas.length
-    ? `${dados.comuns} ${dados.comuns === 1 ? "item vendido" : "itens vendidos"} nas ${lojas.length} redes, na loja mais perto de você`
+    ? `Sua lista (${dados.itens} ${dados.itens === 1 ? "item" : "itens"}) nos mercados perto de você${dados.comuns < dados.itens ? ` · ${dados.comuns} em todos` : ""}`
     : "Ainda não temos preço dos seus itens nas lojas perto de você";
+  const barata = lojas.length ? lojas.reduce((a, b) => (b.total_centavos < a.total_centavos ? b : a)) : null;
+  const porque = !maisBarata
+    ? ""
+    : barata && barata.loja_id !== maisBarata.loja_id
+      ? `${maisBarata.seu_mercado ? "É o seu mercado" : "É o mais perto"}. O ${barata.rede} sai ${reais(maisBarata.total_centavos - barata.total_centavos)} mais barato na prateleira, mas a ida e volta a mais custa cerca de ${reais(Math.max(0, barata.custo_viagem_centavos - maisBarata.custo_viagem_centavos))}.`
+      : lojas.length > 1
+        ? `É o mais barato hoje${maisBarata.seu_mercado ? " e é o seu mercado" : ""}.`
+        : "É o único com preço de todos os itens por enquanto.";
+  const escolhas = maisBarata?.escolhas ?? [];
   const selo = maisBarata?.preco_mais_antigo_em ? `${seloDeFonte("site", maisBarata.preco_mais_antigo_em)} · SEM TAXA` : null;
 
   return (
@@ -98,24 +107,47 @@ export default function Comparar() {
         </View>
       ) : null}
 
+      {maisBarata && lojas.length ? (
+        <View style={[estilos.melhor, { backgroundColor: cor.fundoProfundo }]}>
+          <Text style={[fonte("rotulo"), { color: cor.marcaEtiqueta }]}>MELHOR PARA VOCÊ</Text>
+          <Text style={[fonte("tituloTela"), { color: cor.textoInverso }]}>{maisBarata.nome}</Text>
+          <View style={estilos.valores}>
+            <Text style={[fonte("precoGrande"), { color: cor.textoInverso }]}>{reais(maisBarata.total_centavos)}</Text>
+            <Text style={[fonte("corpoMenor"), { color: cor.textoInverso }]}>
+              {km(maisBarata.distancia_km)}
+              {maisBarata.seu_mercado ? " · seu mercado" : ""}
+            </Text>
+          </View>
+          <View style={[estilos.divisor, { backgroundColor: cor.sobreposicaoDivisor }]} />
+          <Text style={[fonte("corpoMenor"), { color: cor.textoInverso, opacity: 0.9 }]}>{porque}</Text>
+          {escolhas.length ? (
+            <Text style={[fonte("legenda"), { color: cor.textoInverso, opacity: 0.8 }]}>
+              Qualquer marca: pegue {escolhas.map((e) => e.marca).filter(Boolean).slice(0, 3).join(", ")}
+              {escolhas.length > 3 ? ` e mais ${escolhas.length - 3}` : ""}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
+
+      {lojas.length > 1 ? (
+        <Text accessibilityRole="header" style={[fonte("tituloSecao"), { color: cor.textoPrincipal }]}>
+          Total com a ida e volta
+        </Text>
+      ) : null}
       {lojas.map((l, i) => (
         <LinhaDeMercado
           key={l.loja_id}
           rede={l.rede}
-          detalhe={`${l.bairro ?? l.nome} · ${km(l.distancia_km)}`}
-          total={reais(l.total_centavos)}
+          detalhe={`${l.bairro ?? l.nome} · ${km(l.distancia_km)}${l.custo_viagem_centavos ? ` · ${reais(l.total_centavos)} + ${reais(l.custo_viagem_centavos)} de viagem` : ""}`}
+          total={reais(l.total_com_viagem_centavos ?? l.total_centavos)}
           destaque={i === 0 && lojas.length > 1}
           etiqueta={etiqueta}
           nota={l.nota}
           aoTocar={() => setRedeAberta({ rede: l.rede, loja: l.loja_id })}
           diferenca={
-            i === 0
-              ? etiqueta === "Mais barato" && lojas.length > 1 && maisCara && maisCara.total_centavos > l.total_centavos
-                ? `${reais(maisCara.total_centavos - l.total_centavos)} a menos`
-                : undefined
-              : maisBarata
-                ? diferenca(l.total_centavos - maisBarata.total_centavos)
-                : undefined
+            i === 0 || !maisBarata
+              ? undefined
+              : diferenca((l.total_com_viagem_centavos ?? l.total_centavos) - (maisBarata.total_com_viagem_centavos ?? maisBarata.total_centavos))
           }
         />
       ))}
@@ -214,6 +246,8 @@ const estilos = StyleSheet.create({
   cabecalho: { gap: 4, paddingBottom: 4, paddingHorizontal: 0 },
   vazio: { padding: 20, gap: 16 },
   aviso: { flexDirection: "row", alignItems: "center", gap: 8, padding: 12, borderRadius: 12 },
+  melhor: { borderRadius: 28, padding: 20, gap: 10 },
+  divisor: { height: 1 },
   emBreve: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 16, borderWidth: 1.5, borderStyle: "dashed" },
   monograma: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   cartao: { padding: 16, borderRadius: 20, borderWidth: 1, gap: 8 },

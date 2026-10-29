@@ -19,6 +19,10 @@ export type ItemVisivel = {
   id: string;
   produto_id: string | null;
   nome: string;
+  /** "Feijão carioca": o tipo, sem marca nem tamanho (a marca e o tamanho vão embaixo). */
+  nome_curto: string | null;
+  /** Qualquer marca: cada mercado entra com o equivalente mais barato. */
+  qualquer_marca: boolean;
   tamanho: string | null;
   unidade: string | null;
   marca: string | null;
@@ -59,6 +63,8 @@ function calcular(): Instantaneo {
       id: it.id,
       produto_id: info?.produto_id ?? null,
       nome: info?.nome ?? "Item da casa",
+      nome_curto: info?.nome_curto ?? null,
+      qualquer_marca: info?.qualquer_marca ?? false,
       tamanho: info?.tamanho ?? null,
       unidade: info?.unidade ?? null,
       marca: info?.marca ?? null,
@@ -114,7 +120,7 @@ export function useSincroniaAutomatica(): void {
 
 let envioAgendado: ReturnType<typeof setTimeout> | null = null;
 
-function fazer(itemId: string, tipo: TipoOperacao, extra: { valor?: number; produto?: Produto } = {}): void {
+function fazer(itemId: string, tipo: TipoOperacao, extra: { valor?: number; produto?: Produto; qualquerMarca?: boolean } = {}): void {
   const sessao = armazem.lerSessao();
   if (!sessao) throw new Error("aparelho ainda não registrado");
   const op: Operacao = {
@@ -125,12 +131,23 @@ function fazer(itemId: string, tipo: TipoOperacao, extra: { valor?: number; prod
     membro_id: sessao.membro_id,
     valor: extra.valor,
     produto_id: extra.produto?.id,
+    qualquer_marca: tipo === "criar" && extra.qualquerMarca ? true : undefined,
   };
   armazem.gravarLocal(sessao.lista_id, op);
   if (extra.produto) {
     const p = extra.produto;
     armazem.gravarInfo(sessao.lista_id, [
-      { item_id: itemId, produto_id: p.id, nome: p.nome, marca: p.marca, categoria: p.categoria, tamanho: p.tamanho, unidade: p.unidade },
+      {
+        item_id: itemId,
+        produto_id: p.id,
+        nome: p.nome,
+        marca: p.marca,
+        categoria: p.categoria,
+        tamanho: p.tamanho,
+        unidade: p.unidade,
+        nome_curto: p.nome_curto ?? null,
+        qualquer_marca: !!extra.qualquerMarca,
+      },
     ]);
   }
   avisar();
@@ -138,13 +155,17 @@ function fazer(itemId: string, tipo: TipoOperacao, extra: { valor?: number; prod
   envioAgendado = setTimeout(() => void sincronizar(), ESPERA_ENVIO_MS);
 }
 
-/** Pôr um produto na lista: se ele já está (ou esteve), soma 1 no mesmo item; senão cria. */
-export function adicionarProduto(produto: Produto): void {
+/** Pôr um produto na lista: se ele já está (ou esteve), soma 1 no mesmo item; senão cria.
+ * Com `qualquerMarca`, o item vale para qualquer marca do mesmo tipo e tamanho. */
+export function adicionarProduto(produto: Produto, opcoes: { qualquerMarca?: boolean } = {}): void {
   const sessao = armazem.lerSessao();
   if (!sessao) return;
-  const existente = [...armazem.infos(sessao.lista_id).values()].find((i) => i.produto_id === produto.id);
-  if (existente) fazer(existente.item_id, "somar", { produto });
-  else fazer(randomUUID(), "criar", { produto });
+  const qualquerMarca = !!opcoes.qualquerMarca;
+  const existente = [...armazem.infos(sessao.lista_id).values()].find(
+    (i) => i.produto_id === produto.id && !!i.qualquer_marca === qualquerMarca,
+  );
+  if (existente) fazer(existente.item_id, "somar", { produto, qualquerMarca });
+  else fazer(randomUUID(), "criar", { produto, qualquerMarca });
 }
 
 export const somar = (itemId: string) => fazer(itemId, "somar");
@@ -187,7 +208,8 @@ async function executarSincronia(): Promise<void> {
     // Itens que alguém da casa criou em outro aparelho: busca nome e marca uma vez.
     const conhecidos = armazem.infos(lista);
     const todas = armazem.todas(lista);
-    if (todas.some((o) => !conhecidos.has(o.item_id))) {
+    // (e itens guardados antes do nome curto existir)
+    if (todas.some((o) => !conhecidos.has(o.item_id)) || [...conhecidos.values()].some((i) => i.produto_id && !i.nome_curto)) {
       const atual = await api.lista(lista);
       armazem.gravarInfo(
         lista,
@@ -199,6 +221,8 @@ async function executarSincronia(): Promise<void> {
           categoria: i.categoria,
           tamanho: i.tamanho,
           unidade: i.unidade,
+          nome_curto: i.nome_curto ?? null,
+          qualquer_marca: !!i.qualquer_marca,
         })),
       );
     }

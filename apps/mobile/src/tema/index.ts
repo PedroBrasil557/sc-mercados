@@ -30,6 +30,8 @@ export function fonte(estilo: EstiloTexto): TextStyle {
     fontSize: t.tamanho,
     lineHeight: t.altura,
     letterSpacing: t.espacamento,
+    // Preços e números com algarismos de largura igual: os valores ficam alinhados uns sob os outros.
+    ...(/^(preco|numero)/.test(estilo) ? { fontVariant: ["tabular-nums" as const] } : {}),
     ...("caixa" in t && t.caixa === "alta" ? { textTransform: "uppercase" as const } : {}),
   };
 }
