@@ -60,7 +60,7 @@ class ClienteHttp:
         self._ultima = -1e9
         self._robots: dict[str, robots.Regras] = {}
 
-    def _bruto(self, url: str, corpo: dict | None = None) -> bytes:
+    def _bruto(self, url: str, corpo: dict | None = None, cabecalhos: dict | None = None) -> bytes:
         espera = self.intervalo_s - (self._relogio() - self._ultima)
         if espera > 0:
             self._dormir(espera)
@@ -69,7 +69,12 @@ class ClienteHttp:
             url,
             data=dados,
             method="POST" if dados else "GET",
-            headers={"User-Agent": AGENTE, "Accept": "application/json", "Content-Type": "application/json"},
+            headers={
+                "User-Agent": AGENTE,
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                **(cabecalhos or {}),
+            },
         )
         try:
             with self._abrir(req, timeout=30) as resp:
@@ -86,14 +91,25 @@ class ClienteHttp:
             self._robots[dominio] = robots.ler(texto, "SCMercadosColetor")
         return self._robots[dominio]
 
-    def __call__(self, url: str, corpo: dict | None = None):
+    def _checar_robots(self, url: str) -> None:
         u = urlparse(url)
         caminho = u.path + (f"?{u.query}" if u.query else "")
         if not self.regras(u.netloc).permitido(caminho):
             raise BloqueadoPeloRobots(url)
+
+    def __call__(self, url: str, corpo: dict | None = None, cabecalhos: dict | None = None):
+        self._checar_robots(url)
         try:
-            return json.loads(self._bruto(url, corpo).decode("utf-8"))
+            return json.loads(self._bruto(url, corpo, cabecalhos).decode("utf-8"))
         except (urllib.error.URLError, json.JSONDecodeError, TimeoutError):
+            return None
+
+    def binario(self, url: str) -> bytes | None:
+        """Arquivo (o PDF do encarte, por exemplo), com as mesmas regras de intervalo e robots.txt."""
+        self._checar_robots(url)
+        try:
+            return self._bruto(url, cabecalhos={"Accept": "*/*"})
+        except (urllib.error.URLError, TimeoutError):
             return None
 
 

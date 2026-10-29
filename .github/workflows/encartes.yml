@@ -1,0 +1,33 @@
+name: Encartes
+
+# Lê os encartes novos do Fort Atacadista (Blumenau). Encarte já lido é pulado, então rodar todo dia
+# custa poucas requisições; quando sai encarte novo, procura os itens no catálogo e nos sites.
+on:
+  schedule:
+    - cron: "0 10 * * *"  # todo dia às 7h de Brasília
+  workflow_dispatch:
+
+concurrency:
+  group: encartes
+  cancel-in-progress: false
+
+jobs:
+  fort:
+    if: vars.COLETA_ATIVA == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - run: python -m pip install .
+      - name: Fort Atacadista
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m quantofica.coleta.fort
