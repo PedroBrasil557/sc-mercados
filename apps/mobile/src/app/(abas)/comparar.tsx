@@ -1,4 +1,4 @@
-/** R7 Comparar: a recomendação com o porquê, o total de cada mercado já com a ida e volta (R8), dividir a compra,
+/** R7 Comparar: a recomendação com o porquê, o total de cada mercado (só o que se paga no caixa; a viagem só pesa na escolha, R8), dividir a compra,
  * o que pegar nos itens "qualquer marca" e as lojas com só alguns itens (R7, R13, R14). */
 import { router } from "expo-router";
 import { useMemo, useState } from "react";
@@ -68,8 +68,9 @@ export default function Comparar() {
     );
   }
 
-  const lojas = dados.lojas;
-  // A API manda a recomendada primeiro (a mais perto, a não ser que outra pague a viagem e sobre 10 reais).
+  // A API manda a recomendada primeiro (a mais perto, a não ser que outra pague a viagem e sobre 10 reais). A viagem só
+  // decide a recomendação: os valores na tela são só o que se paga no caixa, e as outras lojas vão do total menor ao maior.
+  const lojas = dados.lojas.length ? [dados.lojas[0]!, ...dados.lojas.slice(1).sort((a, b) => a.total_centavos - b.total_centavos)] : [];
   const maisBarata = lojas[0];
   const menorPrateleira = Math.min(...lojas.map((l) => l.total_centavos));
   const etiqueta = maisBarata && maisBarata.total_centavos <= menorPrateleira ? "Mais barato" : "Melhor para você";
@@ -83,7 +84,7 @@ export default function Comparar() {
   const porque = !maisBarata
     ? ""
     : barata && barata.loja_id !== maisBarata.loja_id
-      ? `${maisBarata.seu_mercado ? "É o seu mercado" : "É o mais perto"}. O ${barata.rede} sai ${reais(maisBarata.total_centavos - barata.total_centavos)} mais barato na prateleira, mas a ida e volta a mais custa cerca de ${reais(Math.max(0, barata.custo_viagem_centavos - maisBarata.custo_viagem_centavos))}.`
+      ? `${maisBarata.seu_mercado ? "É o seu mercado" : "É o mais perto"}. O ${barata.rede} sai ${reais(maisBarata.total_centavos - barata.total_centavos)} mais barato, mas fica ${km(Math.max(0, barata.distancia_km - maisBarata.distancia_km))} mais longe: a viagem come a diferença.`
       : lojas.length > 1
         ? `É o mais barato hoje${maisBarata.seu_mercado ? " e é o seu mercado" : ""}.`
         : "É o único com preço de todos os itens por enquanto.";
@@ -119,11 +120,6 @@ export default function Comparar() {
               {maisBarata.seu_mercado ? " · seu mercado" : ""}
             </Text>
           </View>
-          {maisBarata.custo_viagem_centavos ? (
-            <Text style={[fonte("corpoMenor"), { color: cor.textoInverso, opacity: 0.85 }]}>
-              + {reais(maisBarata.custo_viagem_centavos)} de ida e volta = {reais(maisBarata.total_com_viagem_centavos ?? maisBarata.total_centavos)}
-            </Text>
-          ) : null}
           <View style={[estilos.divisor, { backgroundColor: cor.sobreposicaoDivisor }]} />
           <Text style={[fonte("corpoMenor"), { color: cor.textoInverso, opacity: 0.9 }]}>{porque}</Text>
           {escolhas.length ? (
@@ -137,15 +133,15 @@ export default function Comparar() {
 
       {lojas.length > 1 ? (
         <Text accessibilityRole="header" style={[fonte("tituloSecao"), { color: cor.textoPrincipal }]}>
-          Total com a ida e volta
+          Quanto fica em cada mercado
         </Text>
       ) : null}
       {lojas.map((l, i) => (
         <LinhaDeMercado
           key={l.loja_id}
           rede={l.rede}
-          detalhe={`${l.bairro ?? l.nome} · ${km(l.distancia_km)}${l.custo_viagem_centavos ? `\n${reais(l.total_centavos)} + ${reais(l.custo_viagem_centavos)} de ida e volta` : ""}`}
-          total={reais(l.total_com_viagem_centavos ?? l.total_centavos)}
+          detalhe={`${l.bairro ?? l.nome} · ${km(l.distancia_km)}`}
+          total={reais(l.total_centavos)}
           destaque={i === 0 && lojas.length > 1}
           etiqueta={etiqueta}
           nota={l.nota}
@@ -153,7 +149,7 @@ export default function Comparar() {
           diferenca={
             i === 0 || !maisBarata
               ? undefined
-              : diferenca((l.total_com_viagem_centavos ?? l.total_centavos) - (maisBarata.total_com_viagem_centavos ?? maisBarata.total_centavos))
+              : diferenca(l.total_centavos - maisBarata.total_centavos)
           }
         />
       ))}
@@ -211,8 +207,9 @@ export default function Comparar() {
           <View style={[estilos.valeAPena, { backgroundColor: dados.divisao.compensa ? cor.estadoEconomiaSuave : cor.fundoAfundado }]}>
             <Icone nome="info" cor={cor.textoPrincipal} tamanho={20} />
             <Text style={[fonte("legenda"), { color: cor.textoPrincipal, flex: 1 }]}>
-              {dados.divisao.compensa ? "Compensa" : "Não compensa"}: a volta extra (~{km(dados.divisao.distancia_extra_km)}) custa cerca de{" "}
-              {reais(dados.divisao.custo_deslocamento_centavos)}
+              {dados.divisao.compensa
+                ? `Compensa, mesmo com a volta extra de ~${km(dados.divisao.distancia_extra_km)}.`
+                : `Não compensa: a volta extra de ~${km(dados.divisao.distancia_extra_km)} come a economia.`}
             </Text>
           </View>
         </View>

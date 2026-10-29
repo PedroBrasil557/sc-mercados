@@ -13,7 +13,7 @@ import { confirmar } from "@/componentes/Confirmacao";
 import { Icone, type NomeIcone } from "@/componentes/Icone";
 import { SeletorDeBairro } from "@/componentes/SeletorDeBairro";
 import { SeletorDeMercado } from "@/componentes/SeletorDeMercado";
-import { haQuanto, reais, seloDeFonte } from "@/formatar";
+import { haQuanto, km, reais, seloDeFonte } from "@/formatar";
 import { useComparacao } from "@/lista/comparacao";
 import { useGuardado } from "@/lista/guardado";
 import { adicionarProduto, trocarBairro, useLista } from "@/lista/sincronia";
@@ -272,8 +272,8 @@ function CartaoDaLista({ comparacao, itens, carregando, semConexao }: { comparac
   const barata = lojas.reduce((a, b) => (b.total_centavos < a.total_centavos ? b : a), rec);
   let porque: string;
   if (barata.loja_id !== rec.loja_id) {
-    const viagem = Math.max(0, barata.custo_viagem_centavos - rec.custo_viagem_centavos);
-    porque = `No ${barata.rede} sai ${reais(rec.total_centavos - barata.total_centavos)} mais barato, mas a ida e volta a mais custa cerca de ${reais(viagem)}. Aqui sai melhor.`;
+    const longe = Math.max(0, barata.distancia_km - rec.distancia_km);
+    porque = `No ${barata.rede} sai ${reais(rec.total_centavos - barata.total_centavos)} mais barato, mas fica ${km(longe)} mais longe: a viagem come a diferença. Aqui sai melhor.`;
   } else if (lojas.length > 1) {
     const segunda = [...lojas].sort((a, b) => a.total_centavos - b.total_centavos)[1]!;
     porque = `É o mais barato hoje: ${reais(segunda.total_centavos - rec.total_centavos)} a menos que no ${segunda.rede}.`;

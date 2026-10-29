@@ -138,10 +138,7 @@ export default function Produto() {
                     <Text style={[fonte("corpoForte"), { color: cor.textoPrincipal }]}>Vale ir em outro mercado?</Text>
                     <Text style={[fonte("corpoMenor"), { color: cor.textoSuave }]}>
                       No {detalhe.veredito.rede} sai {reais(detalhe.veredito.economia_centavos)} mais barato
-                      {detalhe.veredito.viagem_centavos
-                        ? `, mas a ida e volta a mais (${km(detalhe.veredito.km_ida_e_volta)}) custa cerca de ${reais(detalhe.veredito.viagem_centavos)}`
-                        : ""}
-                      .{" "}
+                      {detalhe.veredito.km_ida_e_volta ? `, com ${km(detalhe.veredito.km_ida_e_volta)} a mais de ida e volta` : ""}.{" "}
                       {detalhe.veredito.compensa ? "Compensa ir até lá." : "Só por este item, não compensa; vale se você já for passar lá."}
                     </Text>
                   </View>
