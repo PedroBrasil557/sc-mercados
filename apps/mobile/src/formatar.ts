@@ -57,3 +57,14 @@ export function haQuanto(quando: string | Date, agora = new Date()): string {
   const d = Math.round(h / 24);
   return d === 1 ? "ontem" : `há ${d} dias`;
 }
+
+/** Marca escrita toda em maiúsculas no site ("SNICKERS") vira "Snickers"; siglas curtas ("OMO", "3M") ficam. */
+export function marca(m: string | null | undefined): string | null {
+  if (!m) return null;
+  if (m.length <= 3 || m !== m.toUpperCase()) return m;
+  return m
+    .toLowerCase()
+    .split(/([ -])/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join("");
+}

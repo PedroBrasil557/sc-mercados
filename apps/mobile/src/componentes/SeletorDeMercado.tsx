@@ -8,11 +8,11 @@ import { fonte, useTema } from "@/tema";
 import { Icone } from "./Icone";
 
 /** Figma "v2/Seletor de mercado": toda tela de preço começa pelo seu mercado. Toque troca o mercado. */
-export function SeletorDeMercado({ prefixo = "Seu mercado" }: { prefixo?: string }) {
+export function SeletorDeMercado() {
   const { cor } = useTema();
   const m = useMercados();
   const seu = m?.seu_mercado;
-  const texto = seu ? `${prefixo}: ${seu.nome} · ${km(seu.distancia_km)}` : `${prefixo}: escolher`;
+  const texto = seu ? `Seu mercado: ${seu.nome} · ${km(seu.distancia_km)}` : "Seu mercado: escolher";
   return (
     <Pressable
       accessibilityRole="button"

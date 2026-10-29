@@ -39,12 +39,12 @@ export function LinhaDeMercado({ rede, detalhe, total, diferenca, destaque = fal
       </View>
       <View style={estilos.mercado}>
         <View style={estilos.nome}>
-          <Text numberOfLines={1} style={[fonte("corpoForte"), { color: cor.textoPrincipal, flexShrink: 1 }]}>
+          <Text numberOfLines={1} style={[fonte("corpoForte"), { color: cor.textoPrincipal }]}>
             {rede}
           </Text>
           {destaque ? <EtiquetaDePreco texto={etiqueta} /> : null}
         </View>
-        <Text numberOfLines={1} style={[fonte("legenda"), { color: cor.textoSuave }]}>
+        <Text numberOfLines={2} style={[fonte("legenda"), { color: cor.textoSuave }]}>
           {detalhe}
         </Text>
         {nota ? <Text style={[fonte("legenda"), { color: cor.textoSuave, fontStyle: "italic" }]}>{nota}</Text> : null}
@@ -61,6 +61,6 @@ const estilos = StyleSheet.create({
   linha: { minHeight: 72, padding: 16, flexDirection: "row", alignItems: "center", gap: 12 },
   monograma: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   mercado: { flex: 1, gap: 2 },
-  nome: { flexDirection: "row", alignItems: "center", gap: 8 },
+  nome: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", columnGap: 8, rowGap: 4 },
   total: { alignItems: "flex-end", gap: 2 },
 });

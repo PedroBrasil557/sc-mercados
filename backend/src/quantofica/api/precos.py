@@ -13,6 +13,7 @@ from ..regras import totais
 from ..regras.preco import Estado, Faixa, Fonte, Observacao, PrecoExibido, preco_atual
 from .banco import Conexao
 from .catalogo import catalogo
+from .contexto import contexto
 from .identidade import MembroAtual
 from .listas import estado_da_lista, lista_da_casa
 
@@ -117,25 +118,15 @@ def comparar(pedido: PedidoComparacao, membro: MembroAtual, conn: Conexao):
     if not itens:
         return {"lojas": [], "comuns": 0, "itens": 0, "divisao": None, "redes_sem_preco": [], "lojas_com_poucos_itens": []}
 
-    # R13: a loja mais próxima de cada rede, pela distância do centro do bairro (R14)
-    lojas = conn.execute(
-        """select l.id, l.nome, l.lat, l.lon, r.nome as rede, b.nome as bairro
-           from loja l join rede r on r.id = l.rede_id left join bairro b on b.id = l.bairro_id
-           where l.cidade_id = %s and l.lat is not null""",
-        (bairro["cidade_id"],),
-    ).fetchall()
-    dist = {str(lj["id"]): totais.distancia_km(bairro["lat_centro"], bairro["lon_centro"], lj["lat"], lj["lon"]) for lj in lojas}
-    mais_proxima: dict[str, dict] = {}
-    for lj in lojas:
-        atual = mais_proxima.get(lj["rede"])
-        if atual is None or dist[str(lj["id"])] < dist[str(atual["id"])]:
-            mais_proxima[lj["rede"]] = lj
+    # R13/R14: a loja de cada rede (a mais perto com preço) e o seu mercado vêm do contexto da casa.
+    ctx = contexto(conn, membro)
+    lojas = ctx.lojas
+    dist = {str(lj["id"]): lj["distancia_km"] for lj in lojas}
+    mais_proxima: dict[str, dict] = dict(ctx.por_rede)
     preferidas = {str(p) for p in pedido.preferidas}
-    # O seu mercado da casa representa a rede dele e é a base da recomendação.
-    config = conn.execute("select config from casa where id = %s", (membro.casa_id,)).fetchone()["config"] or {}
-    seu_id = config.get("meu_mercado")
+    seu_id = str(ctx.seu_mercado["id"]) if ctx.seu_mercado else None
     if seu_id:
-        preferidas.add(seu_id)
+        preferidas.add(seu_id)  # o seu mercado representa a rede dele e é a base da recomendação
     for lj in lojas:
         if str(lj["id"]) in preferidas:
             mais_proxima[lj["rede"]] = lj

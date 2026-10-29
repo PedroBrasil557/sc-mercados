@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { quantidade as formatarQuantidade, reais, tamanho as formatarTamanho } from "@/formatar";
+import { marca as marcaLegivel, quantidade as formatarQuantidade, reais, tamanho as formatarTamanho } from "@/formatar";
 import type { ItemVisivel } from "@/lista/sincronia";
 import { fonte, useTema } from "@/tema";
 
@@ -24,7 +24,11 @@ type Props = {
 export function ItemDaLista({ item, meuNome, aoSomar, aoTirar, aoTocar, aoSegurar, preco, semPrecoAqui }: Props) {
   const { cor } = useTema();
   const quem = item.adicionado_por === meuNome ? "você" : item.adicionado_por;
-  const marca = item.qualquer_marca ? (preco?.marcaDeHoje ? `Qualquer marca · hoje: ${preco.marcaDeHoje}` : "Qualquer marca") : item.marca;
+  const marca = item.qualquer_marca
+    ? preco?.marcaDeHoje
+      ? `Qualquer marca · hoje: ${marcaLegivel(preco.marcaDeHoje)}`
+      : "Qualquer marca"
+    : marcaLegivel(item.marca);
   const detalhe = semPrecoAqui
     ? `Não tem no seu mercado${item.qualquer_marca ? "" : " · trocar por qualquer marca?"}`
     : [marca, quem && quem !== "você" ? `${quem} pôs` : null].filter(Boolean).join(" · ");
@@ -57,6 +61,12 @@ export function ItemDaLista({ item, meuNome, aoSomar, aoTirar, aoTocar, aoSegura
               {detalhe}
             </Text>
           ) : null}
+          {preco ? (
+            <Text numberOfLines={1} style={[fonte("corpoForte"), { color: cor.textoPrincipal }]}>
+              {reais(preco.unitario * item.quantidade)}
+              {item.quantidade !== 1 ? <Text style={[fonte("legenda"), { color: cor.textoSuave }]}>{`  ·  ${reais(preco.unitario)} cada`}</Text> : null}
+            </Text>
+          ) : null}
         </View>
       </Pressable>
       <View style={[estilos.quantidade, { backgroundColor: cor.fundoAfundado }]}>
@@ -66,12 +76,6 @@ export function ItemDaLista({ item, meuNome, aoSomar, aoTirar, aoTocar, aoSegura
         </Text>
         <BotaoQuantidade rotulo={`Somar um de ${item.nome}`} icone="mais" aoTocar={aoSomar} />
       </View>
-      {preco !== undefined ? (
-        <View style={estilos.preco}>
-          <Text style={[fonte("corpoForte"), { color: cor.textoPrincipal }]}>{preco ? reais(preco.unitario * item.quantidade) : "—"}</Text>
-          <Text style={[fonte("legenda"), { color: cor.textoSuave }]}>{preco ? (item.quantidade !== 1 ? `${reais(preco.unitario)} cada` : "no seu mercado") : "sem preço"}</Text>
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -82,7 +86,7 @@ function BotaoQuantidade({ rotulo, icone, aoTocar }: { rotulo: string; icone: "m
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={rotulo}
-      hitSlop={4}
+      hitSlop={6}
       onPress={aoTocar}
       style={({ pressed }) => [estilos.botao, { backgroundColor: pressed ? cor.fundoAfundado : cor.fundoSuperficie }]}
     >
@@ -97,7 +101,6 @@ const estilos = StyleSheet.create({
   texto: { flex: 1, gap: 2 },
   riscado: { textDecorationLine: "line-through" },
   quantidade: { flexDirection: "row", alignItems: "center", gap: 2, padding: 4, borderRadius: 24 },
-  botao: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
-  numero: { width: 32, textAlign: "center" },
-  preco: { minWidth: 64, alignItems: "flex-end" },
+  botao: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  numero: { minWidth: 24, textAlign: "center" },
 });

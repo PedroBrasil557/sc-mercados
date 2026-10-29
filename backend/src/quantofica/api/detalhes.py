@@ -20,8 +20,9 @@ from ..regras.ofertas import oferta_real, percentual_desconto
 from ..regras.preco import Faixa
 from .banco import Conexao
 from .catalogo import catalogo
+from .contexto import contexto, loja_publica
 from .identidade import Membro, MembroAtual
-from .mercado import contexto, loja_publica, preco_por_unidade
+from .mercado import preco_por_unidade
 from .precos import precos_atuais
 
 router = APIRouter(prefix="/v1", tags=["detalhes"])

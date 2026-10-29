@@ -118,6 +118,11 @@ export default function Comparar() {
               {maisBarata.seu_mercado ? " · seu mercado" : ""}
             </Text>
           </View>
+          {maisBarata.custo_viagem_centavos ? (
+            <Text style={[fonte("corpoMenor"), { color: cor.textoInverso, opacity: 0.85 }]}>
+              + {reais(maisBarata.custo_viagem_centavos)} de ida e volta = {reais(maisBarata.total_com_viagem_centavos ?? maisBarata.total_centavos)}
+            </Text>
+          ) : null}
           <View style={[estilos.divisor, { backgroundColor: cor.sobreposicaoDivisor }]} />
           <Text style={[fonte("corpoMenor"), { color: cor.textoInverso, opacity: 0.9 }]}>{porque}</Text>
           {escolhas.length ? (
@@ -138,7 +143,7 @@ export default function Comparar() {
         <LinhaDeMercado
           key={l.loja_id}
           rede={l.rede}
-          detalhe={`${l.bairro ?? l.nome} · ${km(l.distancia_km)}${l.custo_viagem_centavos ? ` · ${reais(l.total_centavos)} + ${reais(l.custo_viagem_centavos)} de viagem` : ""}`}
+          detalhe={`${l.bairro ?? l.nome} · ${km(l.distancia_km)}${l.custo_viagem_centavos ? `\n${reais(l.total_centavos)} + ${reais(l.custo_viagem_centavos)} de ida e volta` : ""}`}
           total={reais(l.total_com_viagem_centavos ?? l.total_centavos)}
           destaque={i === 0 && lojas.length > 1}
           etiqueta={etiqueta}
