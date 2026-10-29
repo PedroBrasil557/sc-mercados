@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
-from . import detalhes, identidade, listas, painel, precos, produtos, web
+from . import detalhes, identidade, listas, mercado, painel, precos, produtos, web
 from .banco import Conexao
 
 
@@ -46,6 +46,7 @@ def create_app(dsn: str | None = None) -> FastAPI:
     app.include_router(precos.router)
     app.include_router(produtos.router)
     app.include_router(detalhes.router)
+    app.include_router(mercado.router)
     app.include_router(painel.router)
     app.include_router(web.router)
     return app

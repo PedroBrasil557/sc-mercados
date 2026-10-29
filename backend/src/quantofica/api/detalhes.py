@@ -15,10 +15,13 @@ from pydantic import BaseModel, Field
 from ..regras import economia as regra_economia
 from ..regras import totais
 from ..regras.ean import normalizar
+from ..regras.nome import nome_curto
 from ..regras.ofertas import oferta_real, percentual_desconto
 from ..regras.preco import Faixa
 from .banco import Conexao
+from .catalogo import catalogo
 from .identidade import Membro, MembroAtual
+from .mercado import contexto, loja_publica, preco_por_unidade
 from .precos import precos_atuais
 
 router = APIRouter(prefix="/v1", tags=["detalhes"])
@@ -61,7 +64,7 @@ def _loja_publica(lj: dict) -> dict:
 
 
 @router.get("/produtos/{produto_id}")
-def detalhe(produto_id: UUID, membro: MembroAtual, conn: Conexao):
+def detalhe(produto_id: UUID, membro: MembroAtual, conn: Conexao, custo_km: Annotated[int, Query(ge=0, le=1000)] = 90):
     """O produto e o preço atual em cada loja da cidade, do mais barato ao mais caro (R5, R6, R13)."""
     produto = conn.execute(
         """select p.id, p.nome_humano as nome, p.marca, p.tamanho, p.unidade, p.categoria_id as categoria,
@@ -89,16 +92,90 @@ def detalhe(produto_id: UUID, membro: MembroAtual, conn: Conexao):
                 }
             )
     precos.sort(key=lambda x: (x["preco_centavos"], x["distancia_km"]))
-    # Gráfico "Preço no <loja>, últimos 30 dias": o menor preço de cada dia na loja mais barata.
+    extra = _no_seu_mercado(conn, membro, produto, precos, custo_km)
+    # Gráfico "Preço no <loja>, últimos 30 dias": no seu mercado (ou na loja mais barata, se ele não vende).
     historico = []
-    if precos:
+    seu = extra["seu_mercado"]
+    loja_historico = seu["loja_id"] if seu and seu["preco_centavos"] else (precos[0]["loja_id"] if precos else None)
+    if loja_historico:
         historico = conn.execute(
             """select (observado_em at time zone 'America/Sao_Paulo')::date as dia, min(preco_centavos) as preco_centavos
                from observacao_preco where produto_id = %s and loja_id = %s and faixa = 'varejo' and observado_em >= %s
                group by 1 order by 1""",
-            (produto_id, precos[0]["loja_id"], datetime.now(UTC) - timedelta(days=30)),
+            (produto_id, loja_historico, datetime.now(UTC) - timedelta(days=30)),
         ).fetchall()
-    return {"produto": produto, "precos": precos, "historico": historico}
+    return {"produto": produto, "precos": precos, "historico": historico} | extra
+
+
+def _no_seu_mercado(conn: Connection, membro: Membro, produto: dict, precos: list[dict], custo_km: int) -> dict:
+    """O que a tela do produto mostra primeiro: o preço no seu mercado, se vale ir em outro, uma linha por rede
+    e as marcas equivalentes mais baratas no seu mercado."""
+    ctx = contexto(conn, membro)
+    seu = ctx.seu_mercado
+    pid = str(produto["id"])
+    produto["nome_curto"] = nome_curto(produto["nome"], produto["marca"])
+    no_seu = next((p for p in precos if seu and str(p["loja_id"]) == str(seu["id"])), None)
+    por_rede: dict[str, dict] = {}
+    for p in sorted(precos, key=lambda x: x["distancia_km"]):
+        if no_seu and p["rede"] == seu["rede"] and str(p["loja_id"]) != str(seu["id"]):
+            if p["preco_centavos"] == no_seu["preco_centavos"]:
+                por_rede.setdefault(p["rede"], no_seu | {"lojas_mesmo_preco": 1})["lojas_mesmo_preco"] += 1
+            continue  # a rede do seu mercado aparece pelo seu mercado
+        r = por_rede.setdefault(p["rede"], p | {"lojas_mesmo_preco": 0})
+        if p["preco_centavos"] == r["preco_centavos"]:
+            r["lojas_mesmo_preco"] += 1
+    linhas = sorted(por_rede.values(), key=lambda x: (x["preco_centavos"], x["distancia_km"]))
+    for lj in ctx.por_rede.values():  # redes perto que não vendem este produto (ou não está no encarte)
+        if lj["rede"] not in por_rede and lj["tipo_preco"] != "sem":
+            motivo = "fora do encarte da semana" if lj["tipo_preco"] == "encarte" else "não vende este produto"
+            linhas.append(loja_publica(lj) | {"preco_centavos": None, "motivo": motivo})
+    veredito = None
+    if no_seu and precos and precos[0]["preco_centavos"] < no_seu["preco_centavos"]:
+        barato = precos[0]
+        economia = no_seu["preco_centavos"] - barato["preco_centavos"]
+        km_a_mais = max(0.0, barato["distancia_km"] - no_seu["distancia_km"]) * 2
+        viagem = round(km_a_mais * custo_km)
+        veredito = {
+            "rede": barato["rede"],
+            "loja": barato["nome"],
+            "economia_centavos": economia,
+            "viagem_centavos": viagem,
+            "km_ida_e_volta": round(km_a_mais, 1),
+            "compensa": economia > viagem + totais.FOLGA_DIVISAO_CENTAVOS,
+        }
+    equivalentes = []
+    cat = catalogo(conn)
+    g = cat["produtos"].get(pid, {}).get("grupo")
+    if seu and g:
+        outros = [m for m in cat["grupos"].get(g, []) if m != pid]
+        atuais = precos_atuais(conn, [seu["id"]], outros, datetime.now(UTC)).get(str(seu["id"]), {}) if outros else {}
+        base = no_seu["preco_centavos"] if no_seu else None
+        for m, ex in sorted(atuais.items(), key=lambda kv: kv[1].observacao.preco_centavos):
+            c = ex.observacao.preco_centavos
+            if base is None or c < base:
+                d = cat["produtos"][m]
+                equivalentes.append(
+                    {
+                        "produto_id": m,
+                        "nome_curto": d["nome_curto"],
+                        "marca": d["marca"],
+                        "tamanho": d["tamanho"],
+                        "unidade": d["unidade"],
+                        "preco_centavos": c,
+                        "economia_centavos": (base - c) if base else None,
+                    }
+                )
+    seu_publico = None
+    if seu:
+        seu_publico = loja_publica(seu) | {"preco_centavos": None}
+        if no_seu:
+            seu_publico |= {
+                "preco_centavos": no_seu["preco_centavos"],
+                "fonte": no_seu["fonte"],
+                "observado_em": no_seu["observado_em"],
+                "preco_por_unidade": preco_por_unidade(no_seu["preco_centavos"], produto["tamanho"], produto["unidade"]),
+            }
+    return {"seu_mercado": seu_publico, "por_rede": linhas, "veredito": veredito, "equivalentes": equivalentes[:3], "grupo": g}
 
 
 # ---------- 18 Outras lojas da rede ----------
@@ -128,14 +205,11 @@ def outras_lojas(pedido: PedidoRede, membro: MembroAtual, conn: Conexao):
 
 
 @router.get("/ofertas")
-def ofertas(membro: MembroAtual, conn: Conexao, limite: Annotated[int, Query(ge=1, le=100)] = 40):
+def ofertas(membro: MembroAtual, conn: Conexao, limite: Annotated[int, Query(ge=1, le=200)] = 80):
     """Ofertas reais na loja mais perto de cada rede. Com menos de 30 dias de histórico vale a regra provisória do R9."""
-    _, lojas = _lojas_do_bairro(conn, _bairro_da_casa(conn, membro))
-    mais_proxima: dict[str, dict] = {}
-    for lj in lojas:
-        if lj["rede"] not in mais_proxima or lj["distancia_km"] < mais_proxima[lj["rede"]]["distancia_km"]:
-            mais_proxima[lj["rede"]] = lj
-    escolhidas = {str(lj["id"]): lj for lj in mais_proxima.values()}
+    ctx = contexto(conn, membro)
+    seu = ctx.seu_mercado
+    escolhidas = {str(lj["id"]): lj for lj in ctx.por_rede.values()}
     agora = datetime.now(UTC)
     produtos = {
         str(r["id"]): r
@@ -160,22 +234,35 @@ def ofertas(membro: MembroAtual, conn: Conexao, limite: Annotated[int, Query(ge=
             dias = (agora - min(t for t, _ in serie)).days if serie else 0
             h30 = [v for t, v in serie if t >= agora - timedelta(days=30)]
             outras = [p[produto_id].observacao.preco_centavos for lid, p in atuais.items() if lid != loja_id and produto_id in p]
-            if not oferta_real(o.preco_centavos, h30, [v for _, v in serie], dias, o.preco_de_centavos, outras):
+            if o.fonte == "encarte":
+                # Encarte (Fort): é oferta quando sai mais barato que em todos os outros mercados perto.
+                if not outras or o.preco_centavos >= min(outras):
+                    continue
+                referencia, base = min(outras), "encarte, comparado com os outros mercados"
+            elif oferta_real(o.preco_centavos, h30, [v for _, v in serie], dias, o.preco_de_centavos, outras):
+                referencia = int(median(h30)) if dias >= 30 and h30 else (o.preco_de_centavos or o.preco_centavos)
+                base = "mediana de 30 dias" if dias >= 30 else "preço anterior da loja, conferido com as outras"
+            else:
                 continue
-            referencia = int(median(h30)) if dias >= 30 and h30 else (o.preco_de_centavos or o.preco_centavos)
+            produto = produtos[produto_id]
             achadas.append(
-                {"produto": produtos[produto_id]}
+                {"produto": produto | {"nome_curto": nome_curto(produto["nome"], produto["marca"])}}
                 | _loja_publica(escolhidas[loja_id])
                 | {
                     "preco_centavos": o.preco_centavos,
                     "referencia_centavos": referencia,
                     "desconto_pct": percentual_desconto(o.preco_centavos, referencia),
-                    "base": "mediana de 30 dias" if dias >= 30 else "preço anterior da loja, conferido com as outras",
+                    "base": base,
+                    "fonte": o.fonte,
+                    "valido_ate": o.valido_ate,
+                    "seu_mercado": seu is not None and loja_id == str(seu["id"]),
+                    "preco_por_unidade": preco_por_unidade(o.preco_centavos, produto["tamanho"], produto["unidade"]),
                     "observado_em": o.observado_em,
                 }
             )
-    achadas.sort(key=lambda a: -a["desconto_pct"])
-    return {"ofertas": achadas[:limite]}
+    # Do seu mercado para o mais longe; dentro de cada loja, o maior desconto primeiro.
+    achadas.sort(key=lambda a: (not a["seu_mercado"], a["distancia_km"], -a["desconto_pct"]))
+    return {"ofertas": achadas[:limite], "seu_mercado": loja_publica(seu)}
 
 
 # ---------- 19 Preço diferente ----------
