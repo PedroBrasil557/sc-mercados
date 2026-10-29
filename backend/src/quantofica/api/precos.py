@@ -30,7 +30,7 @@ def precos_atuais(
         return {}
     linhas = conn.execute(
         """select loja_id, produto_id, preco_centavos, preco_de_centavos, faixa, fonte, observado_em, valido_ate
-           from observacao_preco
+           from preco_atual
            where loja_id = any(%s) and produto_id = any(%s) and observado_em >= %s""",
         (loja_ids, produto_ids, agora - JANELA_OBSERVACOES),
     ).fetchall()

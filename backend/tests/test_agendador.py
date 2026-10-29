@@ -102,7 +102,12 @@ def test_coleta_grava_no_banco(banco_url, monkeypatch):
         novos = c.execute(
             "select produto_id, preco_centavos, evidencia_id from observacao_preco where preco_centavos <> 1899"
         ).fetchall()
-        assert [(r["produto_id"], r["preco_centavos"]) for r in novos] == [(ids["arroz"], 2590)] * 2
+        # Preço igual na segunda rodada: o histórico não ganha linha nova; o preço atual só é confirmado.
+        assert [(r["produto_id"], r["preco_centavos"]) for r in novos] == [(ids["arroz"], 2590)]
+        atual = c.execute(
+            "select preco_centavos, observado_em, desde from preco_atual where produto_id = %s", (ids["arroz"],)
+        ).fetchone()
+        assert atual["preco_centavos"] == 2590 and atual["observado_em"] >= atual["desde"]
         assert novos[0]["evidencia_id"] == "vtex:giassi:giassi01:10"
         fila = c.execute("select tipo, referencia_id from fila_revisao order by tipo, referencia_id").fetchall()
         assert [(r["tipo"], r["referencia_id"]) for r in fila] == [

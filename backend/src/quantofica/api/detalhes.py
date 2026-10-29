@@ -99,13 +99,59 @@ def detalhe(produto_id: UUID, membro: MembroAtual, conn: Conexao, custo_km: Anno
     seu = extra["seu_mercado"]
     loja_historico = seu["loja_id"] if seu and seu["preco_centavos"] else (precos[0]["loja_id"] if precos else None)
     if loja_historico:
-        historico = conn.execute(
-            """select (observado_em at time zone 'America/Sao_Paulo')::date as dia, min(preco_centavos) as preco_centavos
-               from observacao_preco where produto_id = %s and loja_id = %s and faixa = 'varejo' and observado_em >= %s
-               group by 1 order by 1""",
-            (produto_id, loja_historico, datetime.now(UTC) - timedelta(days=30)),
-        ).fetchall()
+        agora = datetime.now(UTC)
+        mudancas = _mudancas(conn, [loja_historico], [produto_id], agora - timedelta(days=30))
+        historico = [
+            {"dia": dia, "preco_centavos": v}
+            for dia, v in serie_diaria(mudancas.get((str(loja_historico), str(produto_id)), []), 30, agora)
+        ]
     return {"produto": produto, "precos": precos, "historico": historico} | extra
+
+
+def _mudancas(
+    conn: Connection, lojas: list, produtos: list, desde: datetime
+) -> dict[tuple[str, str], list[tuple[datetime, int]]]:
+    """Mudanças de preço (varejo) desde `desde`, mais o preço que valia antes delas (para a série começar certo)."""
+    saida: dict[tuple[str, str], list[tuple[datetime, int]]] = {}
+    if not lojas or not produtos:
+        return saida
+    for r in conn.execute(
+        """select loja_id, produto_id, observado_em, preco_centavos from observacao_preco
+           where loja_id = any(%s) and produto_id = any(%s) and faixa = 'varejo' and observado_em >= %s
+           union all
+           select distinct on (loja_id, produto_id) loja_id, produto_id, observado_em, preco_centavos from observacao_preco
+           where loja_id = any(%s) and produto_id = any(%s) and faixa = 'varejo' and observado_em < %s
+           order by 1, 2, 3 desc""",
+        (lojas, produtos, desde, lojas, produtos, desde),
+    ).fetchall():
+        saida.setdefault((str(r["loja_id"]), str(r["produto_id"])), []).append((r["observado_em"], r["preco_centavos"]))
+    for serie in saida.values():
+        serie.sort()
+    return saida
+
+
+def serie_diaria(mudancas: list[tuple[datetime, int]], dias: int, agora: datetime) -> list[tuple[date, int]]:
+    """O histórico guarda só as mudanças de preço; o gráfico e a mediana precisam do preço de cada dia.
+    Cada dia vale o último preço visto até ele (o menor do dia, se mudou no mesmo dia)."""
+    if not mudancas:
+        return []
+    fuso = timedelta(hours=-3)  # America/Sao_Paulo, sem horário de verão
+    por_dia: dict[date, int] = {}
+    for t, v in mudancas:
+        d = (t + fuso).date()
+        por_dia[d] = min(v, por_dia.get(d, v))
+    hoje = (agora + fuso).date()
+    inicio = max(hoje - timedelta(days=dias - 1), min(por_dia))
+    anteriores = [d for d in por_dia if d < inicio]
+    atual = por_dia[max(anteriores)] if anteriores else None
+    serie = []
+    d = inicio
+    while d <= hoje:
+        atual = por_dia.get(d, atual)
+        if atual is not None:
+            serie.append((d, atual))
+        d += timedelta(days=1)
+    return serie
 
 
 def _no_seu_mercado(conn: Connection, membro: Membro, produto: dict, precos: list[dict], custo_km: int) -> dict:
@@ -212,20 +258,30 @@ def ofertas(membro: MembroAtual, conn: Conexao, limite: Annotated[int, Query(ge=
     seu = ctx.seu_mercado
     escolhidas = {str(lj["id"]): lj for lj in ctx.por_rede.values()}
     agora = datetime.now(UTC)
+    # Candidatas: preço "de/por" no site, preço de encarte ou preço que mudou no último mês. O resto não pode ser
+    # oferta real, e assim a conta não percorre o catálogo inteiro.
+    candidatos = [
+        str(r["produto_id"])
+        for r in conn.execute(
+            """select distinct produto_id from preco_atual
+               where loja_id = any(%s) and faixa = %s and observado_em >= %s
+                 and (preco_de_centavos > preco_centavos or fonte = 'encarte' or desde >= %s)""",
+            (list(escolhidas), Faixa.VAREJO, agora - timedelta(days=3), agora - timedelta(days=30)),
+        ).fetchall()
+    ]
     produtos = {
         str(r["id"]): r
         for r in conn.execute(
-            "select id, nome_humano as nome, marca, tamanho, unidade, categoria_id as categoria from produto"
+            "select id, nome_humano as nome, marca, tamanho, unidade, categoria_id as categoria from produto where id = any(%s)",
+            (candidatos,),
         ).fetchall()
     }
     atuais = precos_atuais(conn, list(escolhidas), list(produtos), agora)
-    historico: dict[tuple[str, str], list[tuple[datetime, int]]] = {}
-    for r in conn.execute(
-        """select loja_id, produto_id, observado_em, preco_centavos from observacao_preco
-           where loja_id = any(%s) and faixa = %s and observado_em >= %s""",
-        (list(escolhidas), Faixa.VAREJO, agora - timedelta(days=60)),
-    ).fetchall():
-        historico.setdefault((str(r["loja_id"]), str(r["produto_id"])), []).append((r["observado_em"], r["preco_centavos"]))
+    mudancas = _mudancas(conn, list(escolhidas), list(produtos), agora - timedelta(days=60))
+    historico: dict[tuple[str, str], list[tuple[datetime, int]]] = {
+        chave: [(datetime.combine(d, datetime.min.time(), UTC), v) for d, v in serie_diaria(m, 60, agora)]
+        for chave, m in mudancas.items()
+    }
 
     achadas = []
     for loja_id, por_produto in atuais.items():

@@ -56,7 +56,7 @@ def resumo(conn: Conexao):
         ).fetchall(),
         "cobertura": conn.execute(
             """select r.nome as rede, count(distinct o.produto_id) as produtos
-               from observacao_preco o join loja l on l.id = o.loja_id join rede r on r.id = l.rede_id
+               from preco_atual o join loja l on l.id = o.loja_id join rede r on r.id = l.rede_id
                where o.observado_em > now() - interval '2 days' group by r.nome order by produtos desc"""
         ).fetchall(),
         "produtos": conn.execute("select count(*) as n from produto").fetchone()["n"],
