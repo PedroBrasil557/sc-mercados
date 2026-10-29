@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { fonte, useTema } from "@/tema";
 
@@ -10,21 +10,26 @@ type Props = {
   total: string;
   diferenca?: string; // destaque: "R$ 30,74 a menos"; demais: "+R$ 0,06"
   destaque?: boolean;
+  aoTocar?: () => void;
 };
 
 /** Total da lista numa loja (R7, R13). Destaque só na mais barata, com a etiqueta MAIS BARATO. */
-export function LinhaDeMercado({ rede, detalhe, total, diferenca, destaque = false }: Props) {
+export function LinhaDeMercado({ rede, detalhe, total, diferenca, destaque = false, aoTocar }: Props) {
   const { cor, medida } = useTema();
   return (
-    <View
-      accessible
+    <Pressable
+      disabled={!aoTocar}
+      onPress={aoTocar}
+      accessibilityRole={aoTocar ? "button" : "text"}
+      accessibilityHint={aoTocar ? "Toque para ver as outras lojas da rede" : undefined}
       accessibilityLabel={`${rede}${destaque ? ", mais barato" : ""}, ${total}. ${detalhe}${diferenca ? `. ${diferenca}` : ""}`}
-      style={[
+      style={({ pressed }) => [
         estilos.linha,
         { borderRadius: medida.raioMedio + 2 },
         destaque
           ? { backgroundColor: cor.estadoEconomiaSuave, borderColor: cor.estadoEconomia, borderWidth: 1.5 }
           : { backgroundColor: cor.fundoSuperficie, borderColor: cor.bordaPadrao, borderWidth: 1 },
+        pressed && { opacity: 0.85 },
       ]}
     >
       <View style={[estilos.monograma, { backgroundColor: destaque ? cor.fundoSuperficie : cor.fundoAfundado }]}>
@@ -45,7 +50,7 @@ export function LinhaDeMercado({ rede, detalhe, total, diferenca, destaque = fal
         <Text style={[fonte("precoMedio"), { color: cor.textoPrincipal, fontVariant: ["tabular-nums"] }]}>{total}</Text>
         {diferenca ? <Text style={[fonte("legenda"), { color: destaque ? cor.estadoEconomia : cor.textoSuave }]}>{diferenca}</Text> : null}
       </View>
-    </View>
+    </Pressable>
   );
 }
 

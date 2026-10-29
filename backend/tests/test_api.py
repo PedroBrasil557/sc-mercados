@@ -187,6 +187,12 @@ def test_comparar_usa_a_loja_mais_proxima_de_cada_rede(api, dados, casa):
     assert r["redes_sem_preco"] == []  # as duas redes do teste têm preço
 
 
+def test_comparar_com_a_loja_preferida_da_rede(api, dados, casa):
+    pedido = {"bairro_id": str(dados["bairro"]), "itens": {str(dados["arroz"]): 1}, "preferidas": [str(dados["cooper_longe"])]}
+    lojas = api.post("/v1/comparar", headers=casa["ana"], json=pedido).json()["lojas"]
+    assert [lj["nome"] for lj in lojas] == ["Cooper Garcia", "Giassi Victor Konder"]
+
+
 def test_comparar_a_partir_da_lista(api, dados, casa):
     pedido = {"bairro_id": str(dados["bairro"]), "lista_id": casa["lista"]}
     r = api.post("/v1/comparar", headers=casa["ana"], json=pedido)
@@ -221,6 +227,97 @@ def test_trocar_apelido_e_bairro(api, dados, casa):
     assert r.json()["casa"]["bairro_id"] == str(dados["bairro"])
     assert api.patch("/v1/eu", headers=casa["paulo"], json={"bairro_id": str(uuid4())}).status_code == 422
     api.patch("/v1/eu", headers=casa["paulo"], json={"apelido": "Paulo"})
+
+
+def test_detalhe_do_produto_mostra_o_preco_em_cada_loja(api, dados, casa):
+    api.patch("/v1/eu", headers=casa["ana"], json={"bairro_id": str(dados["bairro"])})
+    r = api.get(f"/v1/produtos/{dados['arroz']}", headers=casa["ana"]).json()
+    assert r["produto"]["nome"] == "Arroz tipo 1"
+    assert [p["preco_centavos"] for p in r["precos"]] == [1000, 2490, 2590]  # todas as lojas, do mais barato
+    assert r["precos"][0]["nome"] == "Cooper Garcia"
+    assert [h["preco_centavos"] for h in r["historico"]] == [1000]  # um dia de coleta na loja mais barata
+
+
+def test_outras_lojas_da_rede(api, dados, casa):
+    pedido = {"rede": "Cooper", "itens": {str(dados["arroz"]): 1, str(dados["cafe"]): 2}}
+    lojas = api.post("/v1/comparar/rede", headers=casa["ana"], json=pedido).json()["lojas"]
+    assert [(lj["nome"], lj["total_centavos"]) for lj in lojas] == [
+        ("Cooper Itoupava Seca", 2490 + 2 * 2099),
+        ("Cooper Garcia", 1000 + 2 * 1000),
+    ]
+
+
+def test_oferta_provisoria_pelo_de_por_conferido_com_as_outras_lojas(api, banco_url, dados, casa):
+    with psycopg.connect(banco_url) as c:
+        # Giassi anuncia café de 24,90 por 17,90: 28% abaixo do "de" e abaixo da mediana das outras lojas
+        c.execute(
+            "insert into observacao_preco (produto_id, loja_id, preco_centavos, preco_de_centavos, fonte, observado_em) "
+            "values (%s, %s, 1790, 2490, 'site', %s)",
+            (dados["cafe"], dados["loja_giassi"], AGORA - timedelta(minutes=30)),
+        )
+    ofertas = api.get("/v1/ofertas", headers=casa["ana"]).json()["ofertas"]
+    assert [(o["produto"]["nome"], o["rede"], o["desconto_pct"]) for o in ofertas] == [("Café tradicional", "Giassi", 28)]
+
+
+def test_reporte_de_preco_vai_para_a_revisao(api, banco_url, dados, casa):
+    r = api.post(
+        "/v1/reportes",
+        headers=casa["ana"],
+        json={"produto_id": str(dados["arroz"]), "loja_id": str(dados["loja_giassi"]), "preco_centavos": 2390},
+    )
+    assert r.status_code == 201
+    with psycopg.connect(banco_url) as c:
+        assert c.execute("select count(*) from fila_revisao where tipo = 'reporte'").fetchone()[0] == 1
+
+
+def test_busca_por_codigo_de_barras(api, banco_url, dados, casa):
+    with psycopg.connect(banco_url) as c:
+        c.execute("insert into ean (codigo, produto_id) values ('07896084700119', %s)", (dados["arroz"],))
+    assert api.get("/v1/produtos/ean/7896084700119", headers=casa["ana"]).json()["nome"] == "Arroz tipo 1"
+    assert api.get("/v1/produtos/ean/7890000000000", headers=casa["ana"]).status_code == 404
+
+
+def test_cupom_calcula_a_economia_so_com_os_itens_reconhecidos(api, banco_url, casa):
+    cupom = {
+        "chave": "4226 1012 3456 7800 0199 6500 1000 0012 3410 0012 3456",
+        "emitente": "Mercado Exemplo",
+        "emitido_em": AGORA.date().isoformat(),
+        "total_centavos": 4290,
+        "itens": [
+            {"descricao": "ARROZ KIARROZ T1 5KG", "codigo": "7896084700119", "quantidade": 1, "valor_total_centavos": 2290},
+            {"descricao": "PAO FRANCES KG", "codigo": "1234", "quantidade": 0.5, "valor_total_centavos": 2000},
+        ],
+    }
+    r = api.post("/v1/cupons", headers=casa["ana"], json=cupom)
+    assert r.status_code == 201, r.text
+    corpo = r.json()
+    assert (corpo["itens"], corpo["itens_reconhecidos"]) == (2, 1)
+    # Arroz: pagou 22,90; média da loja mais perto de cada rede = (25,90 + 24,90) / 2 = 25,40
+    assert corpo["economia"]["economia_centavos"] == 250
+    assert corpo["economia"]["base"] == "comparado à média de Cooper e Giassi"
+    assert api.post("/v1/cupons", headers=casa["ana"], json=cupom).status_code == 409  # o mesmo cupom não conta duas vezes
+    assert api.get("/v1/economia", headers=casa["ana"]).json()["economia_centavos"] == 250
+    with psycopg.connect(banco_url) as c:
+        assert c.execute("select count(*) from codigo_item_loja where codigo_interno = '1234'").fetchone()[0] == 1
+
+
+def test_codigo_de_recuperacao_leva_a_mesma_lista_para_outro_celular(api, casa):
+    codigo = api.post("/v1/eu/recuperacao", headers=casa["paulo"]).json()["codigo"]
+    assert len(codigo) == 14 and codigo.count("-") == 2
+    novo = api.post("/v1/recuperar", json={"codigo": codigo.lower()}).json()
+    assert str(novo["lista_id"]) == casa["lista"]
+    eu = api.get("/v1/eu", headers=com_token(novo["token"])).json()
+    assert eu["membro"]["apelido"] == "Paulo"
+    assert api.post("/v1/recuperar", json={"codigo": "ZZZZ-ZZZZ-ZZZZ"}).status_code == 404
+
+
+def test_lista_na_web_com_politica_de_seguranca(api):
+    r = api.get("/c/ABCD2345")
+    assert r.status_code == 200 and "Lista da casa" in r.text
+    politica = r.headers["content-security-policy"]
+    nonce = politica.split("'nonce-")[1].split("'")[0]
+    assert f'nonce="{nonce}"' in r.text and "unsafe-inline" not in politica and "frame-ancestors 'none'" in politica
+    assert api.get("/c/ABCD2345").headers["content-security-policy"] != politica  # nonce novo a cada resposta
 
 
 def test_bairros_sao_publicos(api):

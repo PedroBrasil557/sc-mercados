@@ -256,6 +256,17 @@ export async function entrarComConvite(codigo: string, apelido: string): Promise
   }
 }
 
+/** Celular novo: o código de recuperação traz a mesma conta, casa e lista (tela 20). */
+export async function recuperarConta(codigo: string): Promise<void> {
+  const r = await api.recuperar(codigo.trim());
+  const eu = await api.eu();
+  const bairro = eu.casa.bairro_id ? ((await api.bairros()).find((b) => b.id === eu.casa.bairro_id) ?? null) : null;
+  await comecarSessao(r, eu.membro.apelido, bairro);
+  const sessao = armazem.lerSessao();
+  if (sessao) armazem.gravarSessao({ ...sessao, nomes: Object.fromEntries(eu.casa.membros.map((m) => [m.id, m.apelido])) });
+  avisar();
+}
+
 export async function trocarBairro(bairro: Bairro): Promise<void> {
   await api.alterarEu({ bairro_id: bairro.id });
   const sessao = armazem.lerSessao();

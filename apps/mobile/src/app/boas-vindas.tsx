@@ -9,7 +9,7 @@ import { Botao } from "@/componentes/Botao";
 import { Campo } from "@/componentes/Campo";
 import { Icone } from "@/componentes/Icone";
 import { SeletorDeBairro } from "@/componentes/SeletorDeBairro";
-import { comecarCasa, entrarComConvite } from "@/lista/sincronia";
+import { comecarCasa, entrarComConvite, recuperarConta } from "@/lista/sincronia";
 import { fonte, useTema } from "@/tema";
 
 const ILUSTRACAO = require("../../assets/ilustracoes/boas-vindas.webp");
@@ -21,6 +21,7 @@ export default function BoasVindas() {
   const [escolhendo, setEscolhendo] = useState(false);
   const [ocupado, setOcupado] = useState(false);
   const [convite, setConvite] = useState<{ codigo: string; apelido: string } | null>(null);
+  const [recuperacao, setRecuperacao] = useState<string | null>(null);
 
   async function comecar() {
     if (!bairro) return setEscolhendo(true);
@@ -30,6 +31,19 @@ export default function BoasVindas() {
       router.replace("/");
     } catch (e) {
       Alert.alert("Não deu para começar agora", e instanceof Error ? e.message : "Verifique a internet e tente de novo.");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  async function recuperar() {
+    if (!recuperacao?.trim()) return;
+    setOcupado(true);
+    try {
+      await recuperarConta(recuperacao);
+      router.replace("/lista");
+    } catch (e) {
+      Alert.alert("Não deu para recuperar", e instanceof Error ? e.message : "Confira o código e tente de novo.");
     } finally {
       setOcupado(false);
     }
@@ -63,7 +77,20 @@ export default function BoasVindas() {
             Compare Giassi, Cooper, Angeloni e outros antes de sair de casa. Sem cadastro.
           </Text>
 
-          {convite ? (
+          {recuperacao !== null ? (
+            <View style={{ gap: 12 }}>
+              <Text style={[fonte("corpoMenor"), { color: cor.textoSuave }]}>Recuperar minha lista num celular novo</Text>
+              <Campo
+                rotulo="Código de recuperação"
+                placeholder="XXXX-XXXX-XXXX"
+                autoCapitalize="characters"
+                autoCorrect={false}
+                maxLength={20}
+                value={recuperacao}
+                onChangeText={setRecuperacao}
+              />
+            </View>
+          ) : convite ? (
             <View style={{ gap: 12 }}>
               <Text style={[fonte("corpoMenor"), { color: cor.textoSuave }]}>Entrar na lista de uma casa</Text>
               <Campo
@@ -106,7 +133,14 @@ export default function BoasVindas() {
       </ScrollView>
 
       <View style={[estilos.rodape, { paddingBottom: margem.bottom + 20 }]}>
-        {convite ? (
+        {recuperacao !== null ? (
+          <>
+            <Botao rotulo="Recuperar minha lista" largo ocupado={ocupado} aoTocar={() => void recuperar()} />
+            <Pressable accessibilityRole="button" onPress={() => setRecuperacao(null)} style={estilos.link}>
+              <Text style={[fonte("corpoMenor"), { color: cor.estadoEconomia }]}>Voltar</Text>
+            </Pressable>
+          </>
+        ) : convite ? (
           <>
             <Botao rotulo="Entrar na casa" largo ocupado={ocupado} aoTocar={() => void entrar()} />
             <Pressable accessibilityRole="button" onPress={() => setConvite(null)} style={estilos.link}>
@@ -116,9 +150,14 @@ export default function BoasVindas() {
         ) : (
           <>
             <Botao rotulo="Ver os mercados perto de mim" largo ocupado={ocupado} aoTocar={() => void comecar()} />
-            <Pressable accessibilityRole="button" onPress={() => setConvite({ codigo: "", apelido: "" })} style={estilos.link}>
-              <Text style={[fonte("corpoMenor"), { color: cor.estadoEconomia }]}>Recebi um convite da minha casa</Text>
-            </Pressable>
+            <View style={estilos.links}>
+              <Pressable accessibilityRole="button" onPress={() => setConvite({ codigo: "", apelido: "" })} style={estilos.link}>
+                <Text style={[fonte("corpoMenor"), { color: cor.estadoEconomia }]}>Recebi um convite</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" onPress={() => setRecuperacao("")} style={estilos.link}>
+                <Text style={[fonte("corpoMenor"), { color: cor.estadoEconomia }]}>Trocar de celular</Text>
+              </Pressable>
+            </View>
             <Text style={[fonte("legenda"), { color: cor.textoSuave, textAlign: "center" }]}>
               Preço de prateleira, sem taxa de entrega. Cada preço mostra de onde veio.
             </Text>
@@ -146,4 +185,5 @@ const estilos = StyleSheet.create({
   seletor: { height: 56, borderRadius: 16, borderWidth: 1.5, flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16 },
   rodape: { paddingTop: 12, paddingHorizontal: 24, gap: 12, alignItems: "center" },
   link: { minHeight: 44, justifyContent: "center", paddingHorizontal: 8 },
+  links: { flexDirection: "row", gap: 16 },
 });

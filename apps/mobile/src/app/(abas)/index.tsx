@@ -12,6 +12,7 @@ import { SeletorDeBairro } from "@/componentes/SeletorDeBairro";
 import * as armazem from "@/lista/armazem";
 import { useComparacao } from "@/lista/comparacao";
 import { adicionarProduto, buscarProdutos, trocarBairro, useLista } from "@/lista/sincronia";
+import { reais } from "@/formatar";
 import { fonte, useTema } from "@/tema";
 
 // Rancho comum de Blumenau (as cestas validadas na coleta de 22/10/2026), pelo começo do nome no catálogo.
@@ -35,6 +36,7 @@ export default function Inicio() {
   const primeiroUso = !aComprar.length && !dispensado;
   const exemplo = useExemplo(primeiroUso ? (sessao?.bairro_id ?? null) : null);
   const membros = sessao ? Object.values(sessao.nomes) : [];
+  const economia = useEconomiaDoMes();
 
   function usarExemplo() {
     if (!exemplo) return;
@@ -133,6 +135,39 @@ export default function Inicio() {
         </View>
       )}
 
+      {sessao?.bairro_id && !primeiroUso ? (
+        <View style={estilos.acoes}>
+          <View style={{ flex: 1 }}>
+            <Botao
+              rotulo="Estou no mercado"
+              tipo="etiqueta"
+              largo
+              aoTocar={() =>
+                router.push({ pathname: "/no-mercado", params: comparacao.dados?.lojas[0] ? { loja: comparacao.dados.lojas[0].loja_id } : {} })
+              }
+            />
+          </View>
+          <Botao rotulo="Ler cupom" tipo="contorno" aoTocar={() => router.push("/ler-cupom")} />
+        </View>
+      ) : null}
+
+      {economia && economia.cupons > 0 ? (
+        <View style={[estilos.economia, { backgroundColor: cor.estadoEconomiaSuave }]}>
+          <View style={[estilos.brilho, { backgroundColor: cor.fundoSuperficie }]}>
+            <Icone nome="brilho" cor={cor.estadoEconomia} />
+          </View>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={[fonte("corpoMenor"), { color: cor.textoPrincipal }]}>
+              Sua economia em {new Date(`${economia.mes}T12:00:00`).toLocaleDateString("pt-BR", { month: "long" })}
+            </Text>
+            <Text style={[fonte("precoMedio"), { color: cor.estadoEconomia }]}>{reais(economia.economia_centavos)}</Text>
+            <Text style={[fonte("legenda"), { color: cor.textoSuave }]}>
+              vs. média dos mercados · {economia.cupons} {economia.cupons === 1 ? "cupom lido" : "cupons lidos"}
+            </Text>
+          </View>
+        </View>
+      ) : null}
+
       <SeletorDeBairro
         visivel={escolhendoBairro}
         selecionado={sessao?.bairro_id ?? null}
@@ -144,6 +179,27 @@ export default function Inicio() {
       />
     </ScrollView>
   );
+}
+
+/** Economia do mês (R12), somada dos cupons lidos pela casa. */
+function useEconomiaDoMes() {
+  const [economia, setEconomia] = useState<{ mes: string; economia_centavos: number; cupons: number } | null>(
+    () => armazem.lerGuardado("economia_mes"),
+  );
+  useEffect(() => {
+    let valido = true;
+    api
+      .economia()
+      .then((e) => {
+        armazem.guardar("economia_mes", e);
+        if (valido) setEconomia(e);
+      })
+      .catch(() => undefined);
+    return () => {
+      valido = false;
+    };
+  }, []);
+  return economia;
 }
 
 /** Lista de exemplo já com os preços de hoje no bairro, antes de a família decidir usá-la. */
@@ -174,4 +230,7 @@ const estilos = StyleSheet.create({
   membro: { width: 44, height: 44, borderRadius: 22, borderWidth: 2.5, alignItems: "center", justifyContent: "center" },
   exemplo: { borderRadius: 24, padding: 20, gap: 12 },
   aviso: { flexDirection: "row", alignItems: "center", gap: 12, padding: 16, borderRadius: 16, borderWidth: 1 },
+  acoes: { flexDirection: "row", gap: 12 },
+  economia: { flexDirection: "row", alignItems: "center", gap: 16, padding: 16, borderRadius: 20 },
+  brilho: { width: 44, height: 44, borderRadius: 14, alignItems: "center", justifyContent: "center" },
 });
