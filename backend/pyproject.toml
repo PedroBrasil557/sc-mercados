@@ -10,6 +10,8 @@ dependencies = [
   "pydantic>=2.8",
   "tzdata>=2024.1",  # fusos horários na imagem slim do container
   "pypdf>=6.0",  # texto dos encartes em PDF (coleta)
+  "pytesseract>=0.3.13",  # OCR dos encartes em imagem (Komprão); o binário tesseract-ocr é instalado à parte
+  "Pillow>=11.0",  # imagens das páginas do encarte (OCR)
 ]
 
 [project.optional-dependencies]
