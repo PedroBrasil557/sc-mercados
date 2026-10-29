@@ -34,6 +34,8 @@ SITES = {
     "angeloni": "super.angeloni.com.br",
     "sams": "www.samsclub.com.br",
 }
+# Redes com coleta própria fora da VTEX (o Vigia acompanha toda rede com site).
+SITES_POR_NOME = {"Rede Top": "www.redetoponline.com.br"}
 
 # Nome no OpenStreetMap (minúsculas) -> rede. Lojas da Cooper fora do site entram na rede Cooper, sem preço on-line.
 # A loja recebe o nome "Rede Bairro", menos as que têm nome próprio (NOMES_PROPRIOS).
@@ -224,7 +226,7 @@ def escrever(bairros, lojas) -> None:
     linhas.append("")
     for rede in sorted({lj["rede"] for lj in lojas}):
         chave = next((k for k, v in NOME_NO_BANCO.items() if v == rede), None)
-        site = SITES.get(chave) if chave else None
+        site = SITES.get(chave) if chave else SITES_POR_NOME.get(rede)
         linhas.append(
             f"insert into rede (nome, site, tem_api) values ({texto(rede)}, {texto(site)}, {'true' if site else 'false'}) "
             "on conflict (nome) do update set site = excluded.site, tem_api = excluded.tem_api;"
