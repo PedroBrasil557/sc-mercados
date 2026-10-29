@@ -70,6 +70,9 @@ def decidir_encarte(proposta: dict, hoje, valido_ate, catalogo: list[Candidato],
             "descartar", 0.99, f"O encarte venceu em {valido_ate:%d/%m}: esse preço não vale mais.", conferido=["validade"]
         )
     conferido.append("validade")
+    if proposta.get("conferir_preco"):  # encarte lido por OCR com leitura incerta: o preço pode estar errado
+        return Decisao("humano", 0.5, "A leitura do encarte (OCR) ficou incerta: confira o preço na imagem antes de ligar.",
+                       conferido=[*conferido, "leitura do OCR"])  # fmt: skip
     if (set(texto) & NAO_MERCADO) or any(" ".join(texto[i : i + 2]) in NAO_MERCADO for i in range(len(texto))):
         return Decisao("descartar", 0.92, "Não é item de mercado (utilidade doméstica).", conferido=[*conferido, "tipo de item"])
     t = tam.extrair(nome)

@@ -1,0 +1,33 @@
+name: Rede Top
+
+# Preços das lojas da Rede Top em Blumenau pela loja virtual (VipCommerce), loja por loja. São ~600 páginas por
+# loja, 1 requisição por segundo: perto de 40 minutos para as quatro lojas que estão na loja virtual.
+on:
+  schedule:
+    - cron: "0 9 * * *"  # todo dia às 6h de Brasília, depois da coleta das redes VTEX
+  workflow_dispatch:
+
+concurrency:
+  group: redetop
+  cancel-in-progress: false
+
+jobs:
+  coletar:
+    if: vars.COLETA_ATIVA == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - run: python -m pip install .
+      - name: Rede Top
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m quantofica.coleta.redetop

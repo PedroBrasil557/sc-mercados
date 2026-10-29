@@ -15,7 +15,7 @@ import re
 import sys
 import uuid
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
@@ -210,10 +210,17 @@ def validade_do_item(conn, rede_id, proposta: dict) -> date | None:
     return linha["valido_ate"] if linha else None
 
 
+def origem(rede: str) -> str:
+    """Prefixo da evidência e das referências da fila: "fort" para o Fort, "komprao" para o Komprão."""
+    return "fort" if rede == REDE else nome_normalizado(rede).replace(" ", "_")
+
+
 def ligar_item(conn, item_id: str, proposta: dict, produtos: list[str], quem: str, agora: datetime) -> tuple[int, date | None]:
     """Item do encarte (fila de revisão) -> produto(s): publica o preço se o encarte ainda vale, lembra o nome
-    para os próximos encartes e resolve o item. Usado pelo painel e pelo Revisor."""
-    rede_id = conn.execute("select id from rede where nome = %s", (REDE,)).fetchone()["id"]
+    para os próximos encartes e resolve o item. Usado pelo painel e pelo Revisor. A proposta diz a rede
+    (itens antigos, sem "rede", são do Fort)."""
+    rede = proposta.get("rede") or REDE
+    rede_id = conn.execute("select id from rede where nome = %s", (rede,)).fetchone()["id"]
     valido_ate = validade_do_item(conn, rede_id, proposta)
     precos = 0
     if valido_ate and valido_ate >= agora.astimezone(FUSO).date():  # vencido: só lembra o nome, não publica preço velho
@@ -222,7 +229,7 @@ def ligar_item(conn, item_id: str, proposta: dict, produtos: list[str], quem: st
         for produto in produtos:
             precos += gravar_precos(
                 conn, produto, lojas, proposta["preco_centavos"], proposta.get("condicional_centavos"),
-                agora, limite, f"fort:{quem}:{item_id}",
+                agora, limite, f"{origem(rede)}:{quem}:{item_id}",
             )  # fmt: skip
     for produto in produtos:
         conn.execute(
@@ -235,19 +242,32 @@ def ligar_item(conn, item_id: str, proposta: dict, produtos: list[str], quem: st
     return precos, valido_ate
 
 
-def rodar(conn, http, agora: datetime, ler=encarte_pdf.ler) -> dict:
-    rede = conn.execute("select id from rede where nome = %s", (REDE,)).fetchone()
-    if rede is None:
-        raise RuntimeError(f"rede {REDE!r} não está cadastrada")
-    rede_id = rede["id"]
-    lojas = lojas_da_cidade(conn, rede_id)
+@dataclass
+class Leitura:
+    """O que a leitura dos encartes de uma rede precisa, carregado uma vez por rodada (Fort e Komprão)."""
+
+    rede: str
+    rede_id: object
+    lojas: list[str]
+    ligados: dict[str, list[str]]  # nome normalizado -> produtos ligados no painel
+    lidos: set[str]  # encartes já lidos
+    catalogo: Catalogo
+    historico: dict[str, list[int]]  # produto -> preços de varejo dos últimos 30 dias
+    resumo: Counter = field(default_factory=Counter)
+    gravados: set[tuple[str, str]] = field(default_factory=set)  # (produto, faixa): em dois encartes vale o primeiro
+
+
+def preparar(conn, rede: str, agora: datetime) -> Leitura:
+    linha = conn.execute("select id from rede where nome = %s", (rede,)).fetchone()
+    if linha is None:
+        raise RuntimeError(f"rede {rede!r} não está cadastrada")
+    rede_id = linha["id"]
     ligados: dict[str, list[str]] = {}
     for r in conn.execute("select nome, produto_id from nome_no_encarte where rede_id = %s", (rede_id,)).fetchall():
         ligados.setdefault(r["nome"], []).append(str(r["produto_id"]))
     lidos = {
         r["encarte_id"] for r in conn.execute("select encarte_id from encarte_lido where rede_id = %s", (rede_id,)).fetchall()
     }
-    catalogo = carregar_catalogo(conn)
     historico: dict[str, list[int]] = {}
     for r in conn.execute(
         """select produto_id, preco_centavos from preco_atual where faixa = 'varejo' and observado_em >= %s
@@ -256,12 +276,50 @@ def rodar(conn, http, agora: datetime, ler=encarte_pdf.ler) -> dict:
         (agora - JANELA_HISTORICO, agora - JANELA_HISTORICO),
     ).fetchall():
         historico.setdefault(str(r["produto_id"]), []).append(r["preco_centavos"])
+    return Leitura(rede, rede_id, lojas_da_cidade(conn, rede_id), ligados, lidos, carregar_catalogo(conn), historico)
 
+
+def publicar_item(conn, http, lt: Leitura, item, proposta: dict, encarte_id: str, agora, valido_ate, evidencia: str) -> int:
+    """Um item do encarte que vale hoje: casa com o catálogo (ou acha nos sites) e grava o preço nas lojas da
+    rede; sem produto, ou com preço longe do histórico, vai para a fila de revisão. Devolve os preços gravados."""
+    # Nome já ligado no painel vale primeiro; depois o catálogo; depois a busca nos sites.
+    produtos = lt.ligados.get(nome_normalizado(item.nome)) or [c.chave for c in casar(item.nome, lt.catalogo.candidatos)]
+    if not produtos:
+        produtos = procurar_nos_sites(conn, http, lt.catalogo, item.nome)
+        lt.resumo["produtos_novos"] += len(produtos)
+    if not produtos:
+        anomalia = Anomalia(f"{origem(lt.rede)}:{encarte_id}:{item.nome}"[:300], "item do encarte sem produto no catálogo")
+        lt.resumo["revisao"] += monitor.abrir_revisao(conn, "encarte", anomalia, proposta)
+        return 0
+    precos = 0
+    for produto in produtos:
+        if monitor.preco_fora_da_curva(item.preco_centavos, lt.historico.get(produto, [])):
+            anomalia = Anomalia(f"preco:{origem(lt.rede)}:{produto}", "preço do encarte mais de 50% longe da mediana de 30 dias")
+            lt.resumo["revisao"] += monitor.abrir_revisao(conn, "anomalia", anomalia, proposta)
+            continue
+        precos += gravar_precos(
+            conn, produto, lt.lojas, item.preco_centavos, item.condicional_centavos,
+            agora, valido_ate, evidencia, lt.gravados,
+        )  # fmt: skip
+    return precos
+
+
+def registrar_encarte(conn, lt: Leitura, encarte_id: str, titulo: str, fim, itens: int, precos: int, agora) -> None:
+    conn.execute(
+        """insert into encarte_lido (rede_id, encarte_id, titulo, valido_ate, itens, precos, lido_em)
+           values (%s, %s, %s, %s, %s, %s, %s) on conflict (rede_id, encarte_id) do nothing""",
+        (lt.rede_id, encarte_id, titulo, fim, itens, precos, agora),
+    )
+    lt.resumo["encartes"] += 1
+    lt.resumo["itens"] += itens
+    lt.resumo["precos"] += precos
+
+
+def rodar(conn, http, agora: datetime, ler=encarte_pdf.ler) -> dict:
+    lt = preparar(conn, REDE, agora)
     hoje = agora.astimezone(FUSO).date()
-    resumo = Counter()
-    gravados: set[tuple[str, str]] = set()  # (produto, faixa): o mesmo produto em dois encartes vale o primeiro
     for e in encartes(http):
-        if e["id"] in lidos:
+        if e["id"] in lt.lidos:
             continue
         url = url_do_pdf(http, e)
         pdf = http.binario(url) if url else None
@@ -274,18 +332,11 @@ def rodar(conn, http, agora: datetime, ler=encarte_pdf.ler) -> dict:
         # Um encarte por vez, inteiro ou nada: se cair no meio, amanhã lê de novo sem duplicar preço.
         with conn.transaction():
             precos = 0
-            if fim and fim >= hoje and lojas:
+            if fim and fim >= hoje and lt.lojas:
                 valido_ate = datetime.combine(fim, time(23, 59, 59), FUSO)
                 for item in enc.itens:
                     if item.por_kg:  # preço por quilo depende da pesagem (R4)
                         continue
-                    # Nome já ligado no painel vale primeiro; depois o catálogo; depois a busca nos sites.
-                    produtos = ligados.get(nome_normalizado(item.nome)) or [
-                        c.chave for c in casar(item.nome, catalogo.candidatos)
-                    ]
-                    if not produtos:
-                        produtos = procurar_nos_sites(conn, http, catalogo, item.nome)
-                        resumo["produtos_novos"] += len(produtos)
                     proposta = {
                         "nome": item.nome,
                         "preco_centavos": item.preco_centavos,
@@ -295,30 +346,11 @@ def rodar(conn, http, agora: datetime, ler=encarte_pdf.ler) -> dict:
                         "valido_ate": fim.isoformat(),
                         "pagina": item.pagina,
                     }
-                    if not produtos:
-                        anomalia = Anomalia(f"fort:{e['id']}:{item.nome}"[:300], "item do encarte sem produto no catálogo")
-                        resumo["revisao"] += monitor.abrir_revisao(conn, "encarte", anomalia, proposta)
-                        continue
-                    for produto in produtos:
-                        if monitor.preco_fora_da_curva(item.preco_centavos, historico.get(produto, [])):
-                            anomalia = Anomalia(
-                                f"preco:fort:{produto}", "preço do encarte mais de 50% longe da mediana de 30 dias"
-                            )
-                            resumo["revisao"] += monitor.abrir_revisao(conn, "anomalia", anomalia, proposta)
-                            continue
-                        precos += gravar_precos(
-                            conn, produto, lojas, item.preco_centavos, item.condicional_centavos,
-                            agora, valido_ate, f"fort:{e['id']}:p{item.pagina}", gravados,
-                        )  # fmt: skip
-            conn.execute(
-                """insert into encarte_lido (rede_id, encarte_id, titulo, valido_ate, itens, precos, lido_em)
-                   values (%s, %s, %s, %s, %s, %s, %s) on conflict (rede_id, encarte_id) do nothing""",
-                (rede_id, e["id"], e["title"], fim, len(enc.itens), precos, agora),
-            )
-        resumo["encartes"] += 1
-        resumo["itens"] += len(enc.itens)
-        resumo["precos"] += precos
-    return dict(resumo)
+                    precos += publicar_item(
+                        conn, http, lt, item, proposta, e["id"], agora, valido_ate, f"fort:{e['id']}:p{item.pagina}"
+                    )
+            registrar_encarte(conn, lt, e["id"], e["title"], fim, len(enc.itens), precos, agora)
+    return dict(lt.resumo)
 
 
 def main() -> int:

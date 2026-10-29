@@ -37,15 +37,17 @@ AGENTES = [
     Agente(
         "coletor",
         "Coletor de preços",
-        "Busca o preço de cada produto do catálogo nos sites do Giassi, da Cooper, do Angeloni e do Sam's, loja por loja.",
-        "Todo dia às 5h e quinta às 15h",
+        "Busca o preço de cada produto do catálogo nos sites do Giassi, da Cooper, do Angeloni, do Sam's e da Rede Top, "
+        "loja por loja.",
+        "Todo dia às 5h (Rede Top às 6h) e quinta às 15h",
         "Roda e publica sozinho. Preço estranho ou embalagem diferente vai para o Revisor.",
         timedelta(hours=26),
     ),
     Agente(
         "leitor_encartes",
         "Leitor de encartes",
-        "Lê os encartes do Fort Atacadista, casa cada item com o catálogo e cadastra produtos novos achados nos sites.",
+        "Lê os encartes do Fort Atacadista e do Komprão (este por OCR), casa cada item com o catálogo e cadastra "
+        "produtos novos achados nos sites.",
         "Todo dia às 7h (encarte já lido é pulado)",
         "Roda e publica sozinho. Item que não casou vai para o Revisor.",
         timedelta(hours=26),
