@@ -25,7 +25,7 @@ import sys
 import unicodedata
 import uuid
 from collections import Counter
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -168,11 +168,7 @@ def itens(produto: dict, rede: str) -> list[ItemDoSite]:
     marca = (produto.get("brand") or "").strip() or None
     saida = []
     for item in produto.get("items") or []:
-        try:
-            gtin = ean_util.normalizar(item.get("ean") or "")
-            gtin = gtin if ean_util.digito_verificador_ok(gtin) else None
-        except ValueError:
-            gtin = None
+        gtin = ean_util.gtin_de_produto(item.get("ean"))  # código interno de loja nunca liga redes (R1)
         ofertas = [s.get("commertialOffer") or {} for s in item.get("sellers") or []]
         disponivel = any(o.get("AvailableQuantity", 0) > 0 and o.get("Price", 0) > 0 for o in ofertas)
         granel = (item.get("measurementUnit") or "un").lower() == "kg" or (item.get("unitMultiplier") or 1) != 1
@@ -211,6 +207,18 @@ class Varredura:
     completa: bool  # nenhuma página falhou nem ficou cortada: dá para dizer o que a rede não vende
     paginas: int
     departamentos: list[str]
+    problemas: list[str] = field(default_factory=list)
+
+
+TENTATIVAS = 3  # uma página que falha (site lento, erro 5xx) é pedida de novo antes de dar a rede por incompleta
+
+
+def _tentar(ler, *args):
+    for _ in range(TENTATIVAS):
+        r = ler(*args)
+        if r is not None:
+            return r
+    return None
 
 
 def varrer(http: Http, rede: Rede) -> Varredura:
@@ -222,9 +230,14 @@ def varrer(http: Http, rede: Rede) -> Varredura:
         arvore = None
     if not isinstance(arvore, list) or not arvore:
         v.completa = False
+        v.problemas.append("árvore de categorias não respondeu")
         return v
     inteligente = rede.id in BUSCA_INTELIGENTE
     vistos: set[str] = set()
+
+    def problema(texto: str) -> None:
+        v.completa = False
+        v.problemas.append(texto)
 
     def guardar(produtos: list) -> None:
         for p in produtos:
@@ -235,14 +248,15 @@ def varrer(http: Http, rede: Rede) -> Varredura:
 
     def ler(cadeia: list[dict]) -> bool:
         """Lê a categoria inteira. False quando passa do limite de uma consulta (e não leu nada)."""
+        nome = "/".join(c["name"] for c in cadeia)
         if inteligente:
             slugs = [c["url"].rstrip("/").rsplit("/", 1)[-1] for c in cadeia]
             pagina, total = 1, None
             while True:
-                r = _pagina_busca(http, rede.dominio, slugs, pagina)
+                r = _tentar(_pagina_busca, http, rede.dominio, slugs, pagina)
                 v.paginas += 1
                 if r is None:
-                    v.completa = False
+                    problema(f"{nome}: página {pagina} falhou")
                     return True
                 produtos, total = r
                 if total > LIMITE_CONSULTA and cadeia[-1].get("children"):
@@ -250,16 +264,16 @@ def varrer(http: Http, rede: Rede) -> Varredura:
                 guardar(produtos)
                 if len(produtos) < POR_PAGINA or pagina * POR_PAGINA >= min(total, LIMITE_CONSULTA):
                     if total > LIMITE_CONSULTA:
-                        v.completa = False  # categoria sem filhos e grande demais: fica cortada
+                        problema(f"{nome}: {total} produtos, mais que uma consulta lê")
                     return True
                 pagina += 1
         ids = [c["id"] for c in cadeia]
         lidos: list = []
         for inicio in range(0, LIMITE_CONSULTA, POR_PAGINA):
-            r = _pagina_catalogo(http, rede.dominio, ids, inicio)
+            r = _tentar(_pagina_catalogo, http, rede.dominio, ids, inicio)
             v.paginas += 1
             if r is None:
-                v.completa = False
+                problema(f"{nome}: página a partir do item {inicio} falhou")
                 break
             lidos += r
             if len(r) < POR_PAGINA:
@@ -268,7 +282,7 @@ def varrer(http: Http, rede: Rede) -> Varredura:
         else:
             if cadeia[-1].get("children"):
                 return False
-            v.completa = False
+            problema(f"{nome}: mais produtos que uma consulta lê")
         guardar(lidos)
         return True
 
@@ -289,25 +303,32 @@ def varrer(http: Http, rede: Rede) -> Varredura:
             continue
         v.departamentos.append(dep["name"])
         visitar([dep])
-        print(f"  {rede.id}: {dep['name']}: {len(v.itens)} SKUs até aqui, {v.paginas} páginas", file=sys.stderr, flush=True)
+        print(f"  {rede.id}: {dep['name']}: {len(v.itens)} SKUs até aqui, {v.paginas} páginas", flush=True)
     return v
 
 
 # ---------- gravação ----------
 
 
-def gravar(conn: psycopg.Connection, rede: Rede, varredura: Varredura, agora: datetime) -> dict:
-    """Liga os SKUs, cria os produtos novos e marca o que a rede não vende. Devolve as contagens."""
+def gravar(conn: psycopg.Connection, rede: Rede, varredura: Varredura, agora: datetime, marcar: bool = True) -> dict:
+    """Liga os SKUs, cria os produtos novos e marca o que a rede não vende. Devolve as contagens.
+
+    Com várias redes, marque as ausências só depois de gravar todas (marcar=False e depois marcar_ausentes):
+    o produto novo que veio da Cooper também precisa constar como "o Giassi não vende"."""
     nome_rede = config.NOME_NO_BANCO[rede.id]
     linha = conn.execute("select id from rede where nome = %s", (nome_rede,)).fetchone()
     if linha is None:
         raise RuntimeError(f"rede {nome_rede!r} não está cadastrada")
     rede_id = linha["id"]
     produto_por_ean = {r["codigo"]: str(r["produto_id"]) for r in conn.execute("select codigo, produto_id from ean").fetchall()}
+    tamanhos = {
+        str(r["id"]): (r["tamanho"], r["unidade"]) for r in conn.execute("select id, tamanho, unidade from produto").fetchall()
+    }
     cria = rede.id not in SO_LIGA_SKU
     conta: Counter = Counter()
     fora: Counter = Counter()
     novos_produtos, novos_eans, ligacoes = [], [], {}
+    recusados: dict[str, tuple[str, str]] = {}  # sku -> (produto, gtin): mesmo código, outra embalagem
     for it in varredura.itens:
         if it.gtin is None:
             conta["sem_ean"] += 1
@@ -336,12 +357,19 @@ def gravar(conn: psycopg.Connection, rede: Rede, varredura: Varredura, agora: da
                 continue
             pid = str(uuid.uuid5(ESPACO, it.gtin))
             produto_por_ean[it.gtin] = pid
+            tamanhos[pid] = (t.quantidade, t.unidade)
             novos_produtos.append((pid, cat, it.nome, it.marca, t.quantidade, t.unidade))
             novos_eans.append((it.gtin, pid))
             conta["novos"] += 1
+        elif not tamanho.mesmo_tamanho_no_site(it.nome, *tamanhos.get(pid, (None, None))):
+            # O site desta rede mostra outra embalagem com o mesmo código: não liga, não coleta, não compara.
+            conta["tamanho_diferente"] += 1
+            recusados[it.sku] = (pid, it.gtin)
+            continue
         ligacoes[it.sku] = (pid, it.nome)
+    aceitos = {pid for pid, _ in ligacoes.values()}
+    recusados = {sku: v for sku, v in recusados.items() if v[0] not in aceitos}
 
-    vistos = {it.gtin for it in varredura.itens if it.gtin}
     with conn.transaction():
         with conn.cursor() as cur:
             cur.executemany(
@@ -356,16 +384,15 @@ def gravar(conn: psycopg.Connection, rede: Rede, varredura: Varredura, agora: da
                    set produto_id = excluded.produto_id, nome_no_site = excluded.nome_no_site""",
                 [(pid, rede_id, sku, nome) for sku, (pid, nome) in ligacoes.items()],
             )
-        # O que a rede vende deixa de ser "ausente"; com a varredura completa, o resto do catálogo passa a ser.
-        conn.execute("delete from ean_ausente where rede_id = %s and codigo = any(%s)", (rede_id, list(vistos)))
-        ausentes = 0
-        if varredura.completa:
-            ausentes = conn.execute(
-                """insert into ean_ausente (rede_id, codigo, verificado_em)
-                   select %s, e.codigo, %s from ean e where e.status = 'ok' and not (e.codigo = any(%s))
-                   on conflict (rede_id, codigo) do update set verificado_em = excluded.verificado_em""",
-                (rede_id, agora, list(vistos)),
-            ).rowcount
+            # Ligação e preço de antes com a embalagem errada saem (o histórico fica, imutável).
+            cur.execute("delete from produto_na_rede where rede_id = %s and sku = any(%s)", (rede_id, list(recusados)))
+            cur.execute(
+                """delete from preco_atual where produto_id = any(%s)
+                   and loja_id in (select id from loja where rede_id = %s)""",
+                ([pid for pid, _ in recusados.values()], rede_id),
+            )
+        outra_embalagem = {g for _, g in recusados.values()}
+        ausentes = marcar_ausentes(conn, rede, varredura, agora, outra_embalagem) if marcar else 0
     return {
         "paginas": varredura.paginas,
         "skus": len(varredura.itens),
@@ -375,7 +402,27 @@ def gravar(conn: psycopg.Connection, rede: Rede, varredura: Varredura, agora: da
         "completa": varredura.completa,
         "descartes": {k: n for k, n in conta.items() if k != "novos"},
         "fora_do_mercado": dict(fora.most_common(8)),
+        "outra_embalagem": outra_embalagem,
     }
+
+
+def marcar_ausentes(
+    conn: psycopg.Connection, rede: Rede, varredura: Varredura, agora: datetime, outra_embalagem: set[str] | None = None
+) -> int:
+    """O que a rede vende deixa de ser "ausente"; com a varredura completa, o resto do catálogo passa a ser.
+    Código que a rede usa para outra embalagem conta como "não vende": a coleta não procura nem compara."""
+    rede_id = conn.execute("select id from rede where nome = %s", (config.NOME_NO_BANCO[rede.id],)).fetchone()["id"]
+    vistos = list({it.gtin for it in varredura.itens if it.gtin} - (outra_embalagem or set()))
+    with conn.transaction():
+        conn.execute("delete from ean_ausente where rede_id = %s and codigo = any(%s)", (rede_id, vistos))
+        if not varredura.completa:
+            return 0
+        return conn.execute(
+            """insert into ean_ausente (rede_id, codigo, verificado_em)
+               select %s, e.codigo, %s from ean e where e.status = 'ok' and not (e.codigo = any(%s))
+               on conflict (rede_id, codigo) do update set verificado_em = excluded.verificado_em""",
+            (rede_id, agora, vistos),
+        ).rowcount
 
 
 def _salvar(caminho: Path, varreduras: dict[str, Varredura]) -> None:
@@ -388,7 +435,9 @@ def _salvar(caminho: Path, varreduras: dict[str, Varredura]) -> None:
 def _carregar(caminho: Path) -> dict[str, Varredura]:
     dados = json.loads(caminho.read_text(encoding="utf-8"))
     return {
-        k: Varredura([ItemDoSite(**i) for i in v["itens"]], v["completa"], v["paginas"], v["departamentos"])
+        k: Varredura(
+            [ItemDoSite(**i) for i in v["itens"]], v["completa"], v["paginas"], v["departamentos"], v.get("problemas") or []
+        )
         for k, v in dados.items()
     }
 
@@ -409,26 +458,40 @@ def main(argv: list[str] | None = None, http: Http | None = None) -> int:
             varreduras[rede.id] = varrer(http, rede)
             v = varreduras[rede.id]
             print(f"{rede.id}: {len(v.itens)} SKUs em {v.paginas} páginas, completa={v.completa}", flush=True)
+            for problema in v.problemas[:20]:
+                print(f"  problema: {problema}", flush=True)
     if args.salvar:
         _salvar(args.salvar, varreduras)
     if args.sem_banco:
         return 0
 
     falhas = 0
+    outras_embalagens: dict[str, set[str]] = {}
     with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True, row_factory=dict_row) as conn:
         with rodada(conn, "catalogador") as resumo:
             for rede in redes:
                 if rede.id not in varreduras:
                     continue
                 try:
-                    r = gravar(conn, rede, varreduras[rede.id], datetime.now(UTC))
+                    r = gravar(conn, rede, varreduras[rede.id], datetime.now(UTC), marcar=False)
+                    outras_embalagens[rede.id] = r.pop("outra_embalagem")
                 except Exception as erro:  # uma rede com problema não impede as outras
                     falhas += 1
                     resumo[config.NOME_NO_BANCO[rede.id]] = {"falhou": repr(erro)[:300]}
                     print(f"{rede.id}: falhou: {erro!r}", file=sys.stderr)
                     continue
                 resumo[config.NOME_NO_BANCO[rede.id]] = {k: r[k] for k in ("skus", "ligados", "novos", "ausentes", "completa")}
+                if varreduras[rede.id].problemas:
+                    resumo[config.NOME_NO_BANCO[rede.id]]["problemas"] = len(varreduras[rede.id].problemas)
                 print(rede.id, r, flush=True)
+            # Ausências só agora, com os produtos novos de todas as redes já no catálogo.
+            for rede in redes:
+                nome = config.NOME_NO_BANCO[rede.id]
+                if rede.id in varreduras and "falhou" not in resumo.get(nome, {}):
+                    resumo[nome]["ausentes"] = marcar_ausentes(
+                        conn, rede, varreduras[rede.id], datetime.now(UTC), outras_embalagens.get(rede.id)
+                    )
+                    print(f"{rede.id}: {resumo[nome]['ausentes']} produtos do catálogo que a rede não vende", flush=True)
             if not any(v.itens for v in varreduras.values()):
                 raise RuntimeError("nenhuma rede respondeu")
     return 1 if falhas else 0
