@@ -15,6 +15,7 @@ import * as SystemUI from "expo-system-ui";
 import { useEffect } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { Confirmacao } from "@/componentes/Confirmacao";
 import { useSincroniaAutomatica } from "@/lista/sincronia";
 import { useTema } from "@/tema";
 
@@ -57,7 +58,9 @@ export default function RaizLayout() {
         <Stack.Screen name="no-mercado" />
         <Stack.Screen name="ler-cupom" options={{ animation: "slide_from_bottom" }} />
         <Stack.Screen name="cupom-lido" options={{ gestureEnabled: false }} />
+        <Stack.Screen name="seu-mercado" options={{ animation: "slide_from_bottom" }} />
       </Stack>
+      <Confirmacao />
     </SafeAreaProvider>
   );
 }

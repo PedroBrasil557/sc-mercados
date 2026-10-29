@@ -1,4 +1,5 @@
-/** 08 No mercado: a lista no corredor, com o preço daquela loja e o total do carrinho. Funciona sem sinal. */
+/** R9 No mercado: abre no seu mercado; a lista com o preço daquela loja, o total do carrinho e, nos itens
+ * "qualquer marca", qual marca pegar. Funciona sem sinal. */
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
@@ -13,6 +14,7 @@ import { PainelPrecoDiferente } from "@/componentes/PainelPrecoDiferente";
 import { quantidade, reais, tamanho } from "@/formatar";
 import * as armazem from "@/lista/armazem";
 import { useComparacao } from "@/lista/comparacao";
+import { seuMercadoId } from "@/lista/mercado";
 import { alternarComprado, type ItemVisivel, useLista } from "@/lista/sincronia";
 import { fonte, useTema } from "@/tema";
 
@@ -25,13 +27,19 @@ export default function NoMercado() {
   const { itens, situacao } = useLista();
   const { dados } = useComparacao();
   const lojas = dados?.lojas ?? [];
-  const [lojaId, setLojaId] = useState<string | null>(params.loja ?? null);
+  const [lojaId, setLojaId] = useState<string | null>(params.loja ?? seuMercadoId());
   const loja = lojas.find((l) => l.loja_id === (lojaId ?? lojas[0]?.loja_id)) ?? null;
   const [precos, setPrecos] = useState<Precos>({});
   const [trocando, setTrocando] = useState(false);
   const [reportando, setReportando] = useState<ItemVisivel | null>(null);
 
-  const produtos = useMemo(() => itens.map((i) => i.produto_id).filter((p): p is string => !!p), [itens]);
+  // "Qualquer marca": nesta loja, o produto escolhido é o equivalente mais barato (a comparação diz qual).
+  const escolhas = useMemo(() => new Map((loja?.escolhas ?? []).map((e) => [e.item, e])), [loja]);
+  const produtoDe = (i: ItemVisivel) => (i.produto_id ? (i.qualquer_marca ? (escolhas.get(i.produto_id)?.produto_id ?? i.produto_id) : i.produto_id) : null);
+  const produtos = useMemo(
+    () => [...new Set(itens.flatMap((i) => (i.produto_id ? [i.produto_id, escolhas.get(i.produto_id)?.produto_id ?? i.produto_id] : [])))],
+    [itens, escolhas],
+  );
 
   useEffect(() => {
     if (!loja) return;
@@ -53,7 +61,14 @@ export default function NoMercado() {
 
   const ordenados = [...itens].sort((a, b) => Number(a.comprado) - Number(b.comprado));
   const noCarrinho = itens.filter((i) => i.comprado);
-  const totalCarrinho = noCarrinho.reduce((s, i) => s + (i.produto_id && precos[i.produto_id] ? precos[i.produto_id]! * i.quantidade : 0), 0);
+  const totalCarrinho = noCarrinho.reduce((s, i) => {
+    const p = produtoDe(i);
+    return s + (p && precos[p] ? precos[p]! * i.quantidade : 0);
+  }, 0);
+  const previsto = itens.reduce((s, i) => {
+    const p = produtoDe(i);
+    return s + (p && precos[p] ? precos[p]! * i.quantidade : 0);
+  }, 0);
   const progresso = itens.length ? noCarrinho.length / itens.length : 0;
 
   return (
@@ -88,6 +103,7 @@ export default function NoMercado() {
         </View>
         <Text style={[fonte("corpoMenor"), { color: cor.textoInverso }]}>
           {noCarrinho.length} de {itens.length} itens · faltam {itens.length - noCarrinho.length}
+          {previsto ? ` · previsto ${reais(previsto)}` : ""}
         </Text>
       </View>
 
@@ -96,7 +112,14 @@ export default function NoMercado() {
         keyExtractor={(i) => i.id}
         contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 120 }}
         renderItem={({ item }) => {
-          const unitario = item.produto_id ? precos[item.produto_id] : undefined;
+          const p = produtoDe(item);
+          const unitario = p ? precos[p] : undefined;
+          const escolha = item.qualquer_marca && item.produto_id ? escolhas.get(item.produto_id) : undefined;
+          const detalhe = escolha?.marca
+            ? `Pegue: ${escolha.marca}${unitario ? ` · ${reais(unitario)}${item.quantidade !== 1 ? " cada" : ""}` : ""}`
+            : item.qualquer_marca
+              ? "Qualquer marca: a mais barata da prateleira"
+              : item.marca;
           return (
             <View style={[estilos.item, { borderBottomColor: cor.bordaPadrao }]}>
               <Pressable
@@ -117,11 +140,14 @@ export default function NoMercado() {
                 <Miniatura categoria={item.categoria} tamanho={tamanho(item.tamanho, item.unidade)} nome={item.nome} />
                 <View style={{ flex: 1, gap: 2 }}>
                   <Text numberOfLines={2} style={[fonte("corpoForte"), { color: cor.textoPrincipal }]}>
-                    {item.nome}
+                    {item.nome_curto ?? item.nome}
+                    {item.quantidade !== 1 ? ` · ${quantidade(item.quantidade)} un` : ""}
                   </Text>
-                  <Text numberOfLines={1} style={[fonte("legenda"), { color: cor.textoSuave }]}>
-                    {[`${quantidade(item.quantidade)} un`, item.marca].filter(Boolean).join(" · ")}
-                  </Text>
+                  {detalhe ? (
+                    <Text numberOfLines={2} style={[fonte("legenda"), { color: escolha ? cor.estadoEconomia : cor.textoSuave }]}>
+                      {detalhe}
+                    </Text>
+                  ) : null}
                 </View>
                 <Text style={[fonte("precoMedio"), { color: cor.textoPrincipal }]}>{unitario ? reais(unitario * item.quantidade) : "—"}</Text>
               </Pressable>

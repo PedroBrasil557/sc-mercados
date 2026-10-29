@@ -8,6 +8,7 @@ import { useEffect, useMemo, useSyncExternalStore } from "react";
 
 import { api, ErroDaApi, type Comparacao } from "@/api/cliente";
 
+import { useMercados } from "./mercado";
 import * as armazem from "./armazem";
 import { useLista } from "./sincronia";
 
@@ -67,12 +68,12 @@ function mudar(parcial: Partial<EstadoDaComparacao>): void {
   ouvintes.forEach((f) => f());
 }
 
-async function calcular(chave: string, bairroId: string, itens: Record<string, number>, forcar: boolean): Promise<void> {
+async function calcular(chave: string, bairroId: string, itens: Record<string, number>, genericos: string[], forcar: boolean): Promise<void> {
   if (!forcar && chave === ultimaChave && estado.dados) return;
   const meu = ++pedido;
   mudar({ carregando: true });
   try {
-    const dados = Object.keys(itens).length ? await api.comparar(bairroId, itens, Object.values(lojasPreferidas()), custoKm()) : null;
+    const dados = Object.keys(itens).length ? await api.comparar(bairroId, itens, Object.values(lojasPreferidas()), custoKm(), genericos) : null;
     if (meu !== pedido) return; // chegou uma resposta mais nova
     ultimaChave = chave;
     const calculadaEm = Date.now();
@@ -101,14 +102,21 @@ export function useComparacao(): EstadoDaComparacao & { atualizar: () => void } 
     for (const i of itens) if (i.produto_id && !i.comprado) q[i.produto_id] = (q[i.produto_id] ?? 0) + i.quantidade;
     return q;
   }, [itens]);
+  const genericos = useMemo(
+    () => [...new Set(itens.filter((i) => i.produto_id && i.qualquer_marca && !i.comprado).map((i) => i.produto_id as string))].sort(),
+    [itens],
+  );
+  const mercados = useMercados(); // trocar o seu mercado refaz a conta
   const bairroId = sessao?.bairro_id ?? null;
-  const chave = bairroId ? `${bairroId}|${JSON.stringify(Object.entries(quantidades).sort())}|${JSON.stringify(lojasPreferidas())}|${custoKm()}` : "";
+  const chave = bairroId
+    ? `${bairroId}|${mercados?.seu_mercado?.loja_id ?? ""}|${JSON.stringify(Object.entries(quantidades).sort())}|${genericos.join(",")}|${JSON.stringify(lojasPreferidas())}|${custoKm()}`
+    : "";
 
   useEffect(() => {
     if (!bairroId) return;
-    const espera = setTimeout(() => void calcular(chave, bairroId, quantidades, false), 500);
+    const espera = setTimeout(() => void calcular(chave, bairroId, quantidades, genericos, false), 500);
     return () => clearTimeout(espera);
-  }, [chave, bairroId, quantidades]);
+  }, [chave, bairroId, quantidades, genericos]);
 
-  return { ...atual, atualizar: () => bairroId && void calcular(chave, bairroId, quantidades, true) };
+  return { ...atual, atualizar: () => bairroId && void calcular(chave, bairroId, quantidades, genericos, true) };
 }
