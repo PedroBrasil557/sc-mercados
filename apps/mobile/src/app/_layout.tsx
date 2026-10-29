@@ -50,6 +50,9 @@ export default function RaizLayout() {
       <StatusBar style={modo === "escuro" ? "light" : "dark"} />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: cor.fundoTela } }}>
         <Stack.Screen name="(abas)" />
+        <Stack.Screen name="boas-vindas" />
+        <Stack.Screen name="adicionar" options={{ animation: "slide_from_bottom" }} />
+        <Stack.Screen name="dados" />
       </Stack>
     </SafeAreaProvider>
   );

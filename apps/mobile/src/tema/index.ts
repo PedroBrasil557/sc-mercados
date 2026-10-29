@@ -6,7 +6,12 @@ import { tema, tipografia, type ModoTema } from "@quantofica/tema";
 import type { TextStyle } from "react-native";
 import { useColorScheme } from "react-native";
 
-export type EstiloTexto = keyof typeof tipografia;
+// Estilos do Figma que ainda não estão no tokens.json exportado. Quando entrarem lá, saem daqui.
+const EXTRAS = {
+  numeroMonograma: { familia: "Bricolage Grotesque", peso: 700, tamanho: 17, altura: 20, espacamento: 0 },
+} as const;
+
+export type EstiloTexto = keyof typeof tipografia | keyof typeof EXTRAS;
 export type Tema = ReturnType<typeof tema>;
 
 // Nome de cada peso carregado por useFonts no _layout raiz.
@@ -17,7 +22,7 @@ const FAMILIAS: Record<string, Record<number, string>> = {
 };
 
 export function fonte(estilo: EstiloTexto): TextStyle {
-  const t = tipografia[estilo];
+  const t = estilo in EXTRAS ? EXTRAS[estilo as keyof typeof EXTRAS] : tipografia[estilo as keyof typeof tipografia];
   const familia = FAMILIAS[t.familia]?.[t.peso];
   if (!familia) throw new Error(`Fonte não carregada: ${t.familia} ${t.peso}`);
   return {

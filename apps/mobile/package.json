@@ -9,7 +9,8 @@
     "tipos": "tsc --noEmit",
     "lint": "expo lint",
     "icones": "node scripts/gerar-icones.mjs",
-    "test": "node --test src/**/*.test.ts"
+    "test": "node --test src/**/*.test.ts",
+    "modulo-icones": "node scripts/gerar-modulo-icones.mjs"
   },
   "dependencies": {
     "@expo-google-fonts/bricolage-grotesque": "^0.4.1",
@@ -17,6 +18,7 @@
     "@expo-google-fonts/ibm-plex-mono": "^0.4.1",
     "@quantofica/tema": "*",
     "expo": "~58.0.21",
+    "expo-clipboard": "~58.0.4",
     "expo-constants": "~58.0.14",
     "expo-crypto": "~58.0.7",
     "expo-font": "~58.0.11",

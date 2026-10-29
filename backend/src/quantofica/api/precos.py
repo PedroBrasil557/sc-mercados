@@ -103,11 +103,12 @@ def comparar(pedido: PedidoComparacao, membro: MembroAtual, conn: Conexao):
     else:
         itens = {str(k): v for k, v in pedido.itens.items()}
     if not itens:
-        return {"lojas": [], "comuns": 0, "divisao": None}
+        return {"lojas": [], "comuns": 0, "itens": 0, "divisao": None, "redes_sem_preco": []}
 
     # R13: a loja mais próxima de cada rede, pela distância do centro do bairro (R14)
     lojas = conn.execute(
-        """select l.id, l.nome, l.lat, l.lon, r.nome as rede from loja l join rede r on r.id = l.rede_id
+        """select l.id, l.nome, l.lat, l.lon, r.nome as rede, b.nome as bairro
+           from loja l join rede r on r.id = l.rede_id left join bairro b on b.id = l.bairro_id
            where l.cidade_id = %s and l.lat is not null""",
         (bairro["cidade_id"],),
     ).fetchall()
@@ -122,20 +123,30 @@ def comparar(pedido: PedidoComparacao, membro: MembroAtual, conn: Conexao):
     atuais = precos_atuais(conn, list(escolhidas), list(itens), datetime.now(UTC))
     # Loja sem nenhum preço desta lista fica de fora: senão zeraria os itens comuns de todas (R7).
     escolhidas = {k: v for k, v in escolhidas.items() if atuais.get(k)}
+    # Redes perto de você que ainda não têm preço desta lista (cartão "Em breve" na tela Comparar).
+    sem_preco = sorted(
+        (
+            {"rede": lj["rede"], "distancia_km": round(dist[str(lj["id"])], 1)}
+            for lj in mais_proxima.values()
+            if lj["rede"] not in {e["rede"] for e in escolhidas.values()}
+        ),
+        key=lambda r: r["distancia_km"],
+    )
     if not escolhidas:
-        return {"lojas": [], "comuns": 0, "divisao": None}
+        return {"lojas": [], "comuns": 0, "itens": len(itens), "divisao": None, "redes_sem_preco": sem_preco}
     tabela = {loja: {p: e.observacao.preco_centavos for p, e in atuais[loja].items()} for loja in escolhidas}
     comp = totais.comparar(itens, tabela, {k: dist[k] for k in escolhidas})
 
     coords = {k: (lj["lat"], lj["lon"]) for k, lj in escolhidas.items()}
     origem = (bairro["lat_centro"], bairro["lon_centro"])
     base_km = 2 * dist[comp.ordem[0]]
-    custos = {}
+    custos, extras_km = {}, {}
     for a in escolhidas:
         for b in escolhidas:
             if a < b:
                 volta = dist[a] + totais.distancia_km(*coords[a], *coords[b]) + totais.distancia_km(*coords[b], *origem)
-                custos[(a, b)] = round(max(0.0, volta - base_km) * pedido.custo_km_centavos)
+                extras_km[(a, b)] = max(0.0, volta - base_km)
+                custos[(a, b)] = round(extras_km[(a, b)] * pedido.custo_km_centavos)
     div = totais.melhor_divisao(itens, tabela, custos)
 
     def info_loja(loja_id: str) -> dict:
@@ -144,6 +155,7 @@ def comparar(pedido: PedidoComparacao, membro: MembroAtual, conn: Conexao):
             "loja_id": loja_id,
             "rede": escolhidas[loja_id]["rede"],
             "nome": escolhidas[loja_id]["nome"],
+            "bairro": escolhidas[loja_id]["bairro"],
             "distancia_km": round(dist[loja_id], 1),
             "total_centavos": _centavos(comp.totais[loja_id]),
             "fora_da_soma": comp.fora_da_soma[loja_id],
@@ -154,6 +166,8 @@ def comparar(pedido: PedidoComparacao, membro: MembroAtual, conn: Conexao):
 
     return {
         "comuns": len(comp.comuns),
+        "itens": len(itens),
+        "redes_sem_preco": sem_preco,
         "lojas": [info_loja(lj) for lj in comp.ordem],
         "divisao": None
         if div is None
@@ -162,6 +176,7 @@ def comparar(pedido: PedidoComparacao, membro: MembroAtual, conn: Conexao):
             "total_centavos": _centavos(div.total_centavos),
             "economia_centavos": _centavos(div.economia_centavos),
             "custo_deslocamento_centavos": div.custo_deslocamento_centavos,
+            "distancia_extra_km": round(extras_km.get(div.lojas, extras_km.get(div.lojas[::-1], 0.0)), 1),
             "compensa": div.compensa,
         },
     }

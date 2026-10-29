@@ -91,7 +91,9 @@ def registrar(pedido: NovoAparelho, conn: Conexao):
 def bairros(conn: Conexao, cidade: str = "Blumenau"):
     """Pública: a escolha do bairro vem antes do token, na primeira abertura (R14)."""
     return conn.execute(
-        "select b.id, b.nome from bairro b join cidade c on c.id = b.cidade_id where c.nome = %s order by b.nome", (cidade,)
+        """select b.id, b.nome, b.lat_centro as lat, b.lon_centro as lon
+           from bairro b join cidade c on c.id = b.cidade_id where c.nome = %s order by b.nome""",
+        (cidade,),
     ).fetchall()
 
 
@@ -142,6 +144,24 @@ def eu(membro: MembroAtual, conn: Conexao):
         "casa": {"id": membro.casa_id, "bairro_id": casa["bairro_id"], "membros": membros},
         "listas": listas,
     }
+
+
+class Alteracao(BaseModel):
+    apelido: str | None = Field(default=None, min_length=1, max_length=40)
+    bairro_id: UUID | None = None
+
+
+@router.patch("/eu")
+def alterar(pedido: Alteracao, membro: MembroAtual, conn: Conexao):
+    """Muda o apelido de quem chamou e/ou o bairro da casa (tela "Trocar bairro")."""
+    with conn.transaction():
+        if pedido.apelido is not None:
+            conn.execute("update membro set apelido = %s where id = %s", (pedido.apelido.strip(), membro.id))
+        if pedido.bairro_id is not None:
+            if not conn.execute("select 1 from bairro where id = %s", (pedido.bairro_id,)).fetchone():
+                raise HTTPException(422, "bairro desconhecido")
+            conn.execute("update casa set bairro_id = %s where id = %s", (pedido.bairro_id, membro.casa_id))
+    return eu(Membro(membro.id, membro.casa_id, pedido.apelido.strip() if pedido.apelido else membro.apelido, membro.papel), conn)
 
 
 @router.delete("/eu", status_code=204)

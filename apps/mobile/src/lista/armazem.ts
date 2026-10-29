@@ -21,6 +21,7 @@ const MIGRACOES = [
    create table cursor (lista_id text primary key, seq integer not null);
    create table sessao (chave text primary key, valor text not null);
    create table produto_cache (id text primary key, nome text not null, marca text, tamanho text, unidade text, categoria text not null);`,
+  `alter table item_info add column tamanho text; alter table item_info add column unidade text;`,
 ];
 
 const versao = db.getFirstSync<{ user_version: number }>("pragma user_version")?.user_version ?? 0;
@@ -33,7 +34,15 @@ for (let v = versao; v < MIGRACOES.length; v++) {
 
 // ---------- Sessão (quem é este aparelho) ----------
 
-export type Sessao = { membro_id: string; casa_id: string; lista_id: string; apelido: string; nomes: Record<string, string> };
+export type Sessao = {
+  membro_id: string;
+  casa_id: string;
+  lista_id: string;
+  apelido: string;
+  nomes: Record<string, string>;
+  bairro_id?: string | null;
+  bairro_nome?: string | null;
+};
 
 export function lerSessao(): Sessao | null {
   const linha = db.getFirstSync<{ valor: string }>("select valor from sessao where chave = 'sessao'");
@@ -42,6 +51,16 @@ export function lerSessao(): Sessao | null {
 
 export function gravarSessao(s: Sessao): void {
   db.runSync("insert or replace into sessao (chave, valor) values ('sessao', ?)", JSON.stringify(s));
+}
+
+/** Valores guardados para abrir a tela sem internet (ex.: a última comparação). */
+export function lerGuardado<T>(chave: string): T | null {
+  const linha = db.getFirstSync<{ valor: string }>("select valor from sessao where chave = ?", chave);
+  return linha ? (JSON.parse(linha.valor) as T) : null;
+}
+
+export function guardar(chave: string, valor: unknown): void {
+  db.runSync("insert or replace into sessao (chave, valor) values (?, ?)", chave, JSON.stringify(valor));
 }
 
 export function apagarTudo(): void {
@@ -109,21 +128,29 @@ export function cursor(listaId: string): number {
 
 // ---------- Nome de cada item (para mostrar sem internet) ----------
 
-export type InfoDoItem = { item_id: string; produto_id: string | null; nome: string | null; marca: string | null; categoria: string | null };
+export type InfoDoItem = {
+  item_id: string;
+  produto_id: string | null;
+  nome: string | null;
+  marca: string | null;
+  categoria: string | null;
+  tamanho?: string | null;
+  unidade?: string | null;
+};
 
 export function gravarInfo(listaId: string, info: InfoDoItem[]): void {
   db.withTransactionSync(() => {
     for (const i of info) {
       db.runSync(
-        "insert or replace into item_info (item_id, lista_id, produto_id, nome, marca, categoria) values (?, ?, ?, ?, ?, ?)",
-        i.item_id, listaId, i.produto_id, i.nome, i.marca, i.categoria,
+        "insert or replace into item_info (item_id, lista_id, produto_id, nome, marca, categoria, tamanho, unidade) values (?, ?, ?, ?, ?, ?, ?, ?)",
+        i.item_id, listaId, i.produto_id, i.nome, i.marca, i.categoria, i.tamanho ?? null, i.unidade ?? null,
       );
     }
   });
 }
 
 export function infos(listaId: string): Map<string, InfoDoItem> {
-  const linhas = db.getAllSync<InfoDoItem>("select item_id, produto_id, nome, marca, categoria from item_info where lista_id = ?", listaId);
+  const linhas = db.getAllSync<InfoDoItem>("select item_id, produto_id, nome, marca, categoria, tamanho, unidade from item_info where lista_id = ?", listaId);
   return new Map(linhas.map((l) => [l.item_id, l]));
 }
 
