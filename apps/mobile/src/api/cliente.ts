@@ -54,7 +54,7 @@ async function pedir<T>(metodo: string, caminho: string, corpo?: unknown, comTok
 
 // ---------- Tipos (espelham backend/src/quantofica/api) ----------
 
-export type Bairro = { id: string; nome: string };
+export type Bairro = { id: string; nome: string; lat: number; lon: number };
 export type Registro = { token: string; membro_id: string; casa_id: string; lista_id: string | null };
 export type Eu = {
   membro: { id: string; apelido: string; papel: "dono" | "membro" };
@@ -69,6 +69,8 @@ export type Produto = {
   tamanho: string | null;
   unidade: string | null;
   categoria: string;
+  menor_preco_centavos?: number | null;
+  menor_preco_rede?: string | null;
 };
 export type ItemDaLista = {
   id: string;
@@ -80,11 +82,14 @@ export type ItemDaLista = {
   nome: string | null;
   marca: string | null;
   categoria: string | null;
+  tamanho: string | null;
+  unidade: string | null;
 };
 export type LojaComparada = {
   loja_id: string;
   rede: string;
   nome: string;
+  bairro: string | null;
   distancia_km: number;
   total_centavos: number;
   fora_da_soma: string[];
@@ -94,12 +99,15 @@ export type LojaComparada = {
 };
 export type Comparacao = {
   comuns: number;
+  itens: number;
+  redes_sem_preco: { rede: string; distancia_km: number }[];
   lojas: LojaComparada[];
   divisao: null | {
     lojas: [string, string];
     total_centavos: number;
     economia_centavos: number;
     custo_deslocamento_centavos: number;
+    distancia_extra_km: number;
     compensa: boolean;
   };
 };
@@ -124,6 +132,7 @@ export const api = {
   produtos: (busca = "") => pedir<Produto[]>("GET", `/v1/produtos?busca=${encodeURIComponent(busca)}&limite=200`),
   convidar: () => pedir<{ codigo: string; expira_em: string; usos_restantes: number }>("POST", "/v1/casa/convites"),
   eu: () => pedir<Eu>("GET", "/v1/eu"),
+  alterarEu: (mudanca: { apelido?: string; bairro_id?: string }) => pedir<Eu>("PATCH", "/v1/eu", mudanca),
 
   async excluirConta(): Promise<void> {
     await pedir<void>("DELETE", "/v1/eu");
@@ -135,6 +144,7 @@ export const api = {
   operacoesDesde: (listaId: string, cursor: number) =>
     pedir<{ operacoes: (Operacao & { seq: number })[]; cursor: number }>("GET", `/v1/listas/${listaId}/operacoes?desde=${cursor}`),
   lista: (listaId: string) => pedir<{ itens: ItemDaLista[]; cursor: number }>("GET", `/v1/listas/${listaId}`),
-  comparar: (bairroId: string, listaId: string) =>
-    pedir<Comparacao>("POST", "/v1/comparar", { bairro_id: bairroId, lista_id: listaId }),
+  /** Itens = produto -> quantidade, como estão no aparelho (inclui mudanças ainda não enviadas). */
+  comparar: (bairroId: string, itens: Record<string, number>) =>
+    pedir<Comparacao>("POST", "/v1/comparar", { bairro_id: bairroId, itens }),
 };

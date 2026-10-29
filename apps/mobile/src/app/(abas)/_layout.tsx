@@ -1,13 +1,18 @@
+import { Redirect } from "expo-router";
 import { TabList, TabSlot, TabTrigger, Tabs } from "expo-router/ui";
 import { StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BotaoDeAba } from "@/componentes/BotaoDeAba";
+import { useLista } from "@/lista/sincronia";
 import { useTema } from "@/tema";
 
 export default function AbasLayout() {
   const { cor } = useTema();
   const margem = useSafeAreaInsets();
+  const { sessao } = useLista();
+  // Sem casa ainda: a primeira abertura começa nas boas-vindas.
+  if (!sessao) return <Redirect href="/boas-vindas" />;
   return (
     <Tabs>
       <TabSlot />
@@ -25,7 +30,7 @@ export default function AbasLayout() {
           <BotaoDeAba icone="comparar" rotulo="Comparar" />
         </TabTrigger>
         <TabTrigger name="ofertas" href="/ofertas" asChild>
-          <BotaoDeAba icone="ofertas" rotulo="Ofertas" />
+          <BotaoDeAba icone="oferta" rotulo="Ofertas" />
         </TabTrigger>
         <TabTrigger name="perfil" href="/perfil" asChild>
           <BotaoDeAba icone="perfil" rotulo="Perfil" />

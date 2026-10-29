@@ -182,6 +182,9 @@ def test_comparar_usa_a_loja_mais_proxima_de_cada_rede(api, dados, casa):
     assert divisao["total_centavos"] == 2490 + 2 * 1899
     assert divisao["economia_centavos"] == 100
     assert divisao["compensa"] is False  # R$1 de economia não paga a viagem extra + R$10
+    assert divisao["distancia_extra_km"] >= 0
+    assert r["itens"] == 2
+    assert r["redes_sem_preco"] == []  # as duas redes do teste têm preço
 
 
 def test_comparar_a_partir_da_lista(api, dados, casa):
@@ -201,6 +204,9 @@ def test_busca_no_catalogo_ignora_acento_e_maiuscula(api, casa):
         return [p["nome"] for p in api.get("/v1/produtos", headers=casa["ana"], params={"busca": busca}).json()]
 
     assert nomes("cafe") == ["Café tradicional"]
+    cafe = api.get("/v1/produtos", headers=casa["ana"], params={"busca": "cafe"}).json()[0]
+    # Giassi 18,99 x Cooper perto 20,99 x Cooper longe 10,00: o menor da cidade, com a rede
+    assert (cafe["menor_preco_centavos"], cafe["menor_preco_rede"]) == (1000, "Cooper")
     assert nomes("PILÃO") == ["Café tradicional"]  # pela marca
     assert nomes("arroz kiarroz") == ["Arroz tipo 1"]  # todas as palavras
     assert nomes("feijão") == []
@@ -208,8 +214,19 @@ def test_busca_no_catalogo_ignora_acento_e_maiuscula(api, casa):
     assert api.get("/v1/produtos").status_code == 401
 
 
+def test_trocar_apelido_e_bairro(api, dados, casa):
+    r = api.patch("/v1/eu", headers=casa["paulo"], json={"apelido": "Paulão", "bairro_id": str(dados["bairro"])})
+    assert r.status_code == 200
+    assert r.json()["membro"]["apelido"] == "Paulão"
+    assert r.json()["casa"]["bairro_id"] == str(dados["bairro"])
+    assert api.patch("/v1/eu", headers=casa["paulo"], json={"bairro_id": str(uuid4())}).status_code == 422
+    api.patch("/v1/eu", headers=casa["paulo"], json={"apelido": "Paulo"})
+
+
 def test_bairros_sao_publicos(api):
-    assert [b["nome"] for b in api.get("/v1/bairros").json()] == ["Victor Konder"]
+    bairros = api.get("/v1/bairros").json()
+    assert [b["nome"] for b in bairros] == ["Victor Konder"]
+    assert round(bairros[0]["lat"], 4) == -26.9068
 
 
 def test_exclusao_de_conta(api, banco_url, casa):

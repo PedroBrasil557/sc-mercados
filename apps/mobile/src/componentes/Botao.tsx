@@ -5,15 +5,18 @@ import { fonte, useTema } from "@/tema";
 type Props = {
   rotulo: string;
   aoTocar: () => void;
-  tipo?: "principal" | "secundario";
+  /** Figma "Botão": primário (ação principal, uma por tela), etiqueta (economia/mercado), contorno (secundária). */
+  tipo?: "primario" | "etiqueta" | "contorno";
   ocupado?: boolean;
   desativado?: boolean;
+  largo?: boolean;
 };
 
-/** Botão de 48 dp de altura (alvo de toque mínimo do Android). */
-export function Botao({ rotulo, aoTocar, tipo = "principal", ocupado = false, desativado = false }: Props) {
+/** Botão em pílula: 52 dp, padding 24, texto Botão. Pressionado escurece; desativado fica a 40%. */
+export function Botao({ rotulo, aoTocar, tipo = "primario", ocupado = false, desativado = false, largo = false }: Props) {
   const { cor } = useTema();
-  const principal = tipo === "principal";
+  const fundo = tipo === "primario" ? cor.fundoProfundo : tipo === "etiqueta" ? cor.marcaEtiqueta : cor.fundoSuperficie;
+  const texto = tipo === "primario" ? cor.textoInverso : tipo === "etiqueta" ? cor.marcaSobreEtiqueta : cor.textoPrincipal;
   const inativo = desativado || ocupado;
   return (
     <Pressable
@@ -24,19 +27,19 @@ export function Botao({ rotulo, aoTocar, tipo = "principal", ocupado = false, de
       onPress={aoTocar}
       style={({ pressed }) => [
         estilos.botao,
-        principal ? { backgroundColor: cor.marcaEtiqueta } : { borderWidth: 1, borderColor: cor.bordaForte },
-        (pressed || inativo) && { opacity: 0.6 },
+        { backgroundColor: fundo },
+        tipo === "contorno" && { borderWidth: 1.5, borderColor: cor.bordaPadrao },
+        largo && estilos.largo,
+        pressed && { opacity: 0.92 },
+        desativado && { opacity: 0.4 },
       ]}
     >
-      {ocupado ? (
-        <ActivityIndicator color={principal ? cor.marcaSobreEtiqueta : cor.textoPrincipal} />
-      ) : (
-        <Text style={[fonte("botao"), { color: principal ? cor.marcaSobreEtiqueta : cor.textoPrincipal }]}>{rotulo}</Text>
-      )}
+      {ocupado ? <ActivityIndicator color={texto} /> : <Text style={[fonte("botao"), { color: texto }]}>{rotulo}</Text>}
     </Pressable>
   );
 }
 
 const estilos = StyleSheet.create({
-  botao: { minHeight: 48, borderRadius: 24, paddingHorizontal: 20, alignItems: "center", justifyContent: "center" },
+  botao: { height: 52, borderRadius: 26, paddingHorizontal: 24, alignItems: "center", justifyContent: "center" },
+  largo: { alignSelf: "stretch" },
 });

@@ -17,7 +17,10 @@ import { aplicar, type TipoOperacao } from "./regras";
 
 export type ItemVisivel = {
   id: string;
+  produto_id: string | null;
   nome: string;
+  tamanho: string | null;
+  unidade: string | null;
   marca: string | null;
   categoria: string | null;
   quantidade: number;
@@ -54,7 +57,10 @@ function calcular(): Instantaneo {
     const info = infos.get(it.id);
     itens.push({
       id: it.id,
+      produto_id: info?.produto_id ?? null,
       nome: info?.nome ?? "Item da casa",
+      tamanho: info?.tamanho ?? null,
+      unidade: info?.unidade ?? null,
       marca: info?.marca ?? null,
       categoria: info?.categoria ?? null,
       quantidade: it.quantidade,
@@ -123,7 +129,9 @@ function fazer(itemId: string, tipo: TipoOperacao, extra: { valor?: number; prod
   armazem.gravarLocal(sessao.lista_id, op);
   if (extra.produto) {
     const p = extra.produto;
-    armazem.gravarInfo(sessao.lista_id, [{ item_id: itemId, produto_id: p.id, nome: p.nome, marca: p.marca, categoria: p.categoria }]);
+    armazem.gravarInfo(sessao.lista_id, [
+      { item_id: itemId, produto_id: p.id, nome: p.nome, marca: p.marca, categoria: p.categoria, tamanho: p.tamanho, unidade: p.unidade },
+    ]);
   }
   avisar();
   if (envioAgendado) clearTimeout(envioAgendado);
@@ -142,6 +150,8 @@ export function adicionarProduto(produto: Produto): void {
 export const somar = (itemId: string) => fazer(itemId, "somar");
 export const tirar = (itemId: string) => fazer(itemId, "tirar");
 export const remover = (itemId: string) => fazer(itemId, "remover");
+/** Desfazer a remoção: o item volta com a quantidade que tinha. */
+export const restaurar = (itemId: string, quantidade: number) => fazer(itemId, "somar", { valor: quantidade });
 export const alternarComprado = (item: ItemVisivel) => fazer(item.id, item.comprado ? "desmarcar" : "marcar");
 
 // ---------- Ida e volta com o servidor ----------
@@ -181,7 +191,15 @@ async function executarSincronia(): Promise<void> {
       const atual = await api.lista(lista);
       armazem.gravarInfo(
         lista,
-        atual.itens.map((i) => ({ item_id: i.id, produto_id: i.produto_id, nome: i.nome, marca: i.marca, categoria: i.categoria })),
+        atual.itens.map((i) => ({
+          item_id: i.id,
+          produto_id: i.produto_id,
+          nome: i.nome,
+          marca: i.marca,
+          categoria: i.categoria,
+          tamanho: i.tamanho,
+          unidade: i.unidade,
+        })),
       );
     }
     // Alguém novo na casa: atualiza os apelidos (avisos como "Paulo tinha removido este item").
@@ -199,19 +217,58 @@ async function executarSincronia(): Promise<void> {
 
 // ---------- Entrar na casa ----------
 
-async function comecarSessao(r: { membro_id: string; casa_id: string; lista_id: string | null }, apelido: string): Promise<void> {
+type Bairro = { id: string; nome: string };
+
+async function comecarSessao(
+  r: { membro_id: string; casa_id: string; lista_id: string | null },
+  apelido: string,
+  bairro: Bairro | null,
+): Promise<void> {
   if (!r.lista_id) throw new Error("a casa ainda não tem lista");
-  armazem.gravarSessao({ membro_id: r.membro_id, casa_id: r.casa_id, lista_id: r.lista_id, apelido, nomes: { [r.membro_id]: apelido } });
+  armazem.gravarSessao({
+    membro_id: r.membro_id,
+    casa_id: r.casa_id,
+    lista_id: r.lista_id,
+    apelido,
+    nomes: { [r.membro_id]: apelido },
+    bairro_id: bairro?.id ?? null,
+    bairro_nome: bairro?.nome ?? null,
+  });
   avisar();
   await Promise.all([sincronizar(), buscarProdutos("")]);
 }
 
-export async function comecarCasa(apelido: string): Promise<void> {
-  await comecarSessao(await api.registrar(apelido.trim()), apelido.trim());
+/** Primeira abertura: a casa nasce com o bairro escolhido. O apelido pode ser trocado depois no Perfil. */
+export async function comecarCasa(bairro: Bairro, apelido = "Eu"): Promise<void> {
+  await comecarSessao(await api.registrar(apelido, bairro.id), apelido, bairro);
 }
 
 export async function entrarComConvite(codigo: string, apelido: string): Promise<void> {
-  await comecarSessao(await api.entrarComConvite(codigo.trim(), apelido.trim()), apelido.trim());
+  const r = await api.entrarComConvite(codigo.trim(), apelido.trim());
+  await comecarSessao(r, apelido.trim(), null);
+  // O bairro é o da casa em que entrou.
+  const eu = await api.eu();
+  const sessao = armazem.lerSessao();
+  if (sessao && eu.casa.bairro_id) {
+    const nome = (await api.bairros()).find((b) => b.id === eu.casa.bairro_id)?.nome ?? null;
+    armazem.gravarSessao({ ...sessao, bairro_id: eu.casa.bairro_id, bairro_nome: nome });
+    avisar();
+  }
+}
+
+export async function trocarBairro(bairro: Bairro): Promise<void> {
+  await api.alterarEu({ bairro_id: bairro.id });
+  const sessao = armazem.lerSessao();
+  if (sessao) armazem.gravarSessao({ ...sessao, bairro_id: bairro.id, bairro_nome: bairro.nome });
+  avisar();
+}
+
+export async function trocarApelido(apelido: string): Promise<void> {
+  const novo = apelido.trim();
+  await api.alterarEu({ apelido: novo });
+  const sessao = armazem.lerSessao();
+  if (sessao) armazem.gravarSessao({ ...sessao, apelido: novo, nomes: { ...sessao.nomes, [sessao.membro_id]: novo } });
+  avisar();
 }
 
 export async function apagarMinhaConta(): Promise<void> {
