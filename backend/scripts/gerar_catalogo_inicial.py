@@ -1,4 +1,4 @@
-"""Gera db/dados/catalogo_inicial.sql: as 10 categorias e os 32 produtos das cestas validadas na coleta de 22/10/2026.
+"""Gera db/dados/02_catalogo_inicial.sql: as 10 categorias e os 32 produtos das cestas validadas na coleta de 22/10/2026.
 
 O catálogo de verdade cresce pelo agente Catalogador (com revisão); este é só o ponto de partida para o
 teste com as famílias e para a coleta diária ter o que buscar.
@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from quantofica.regras import ean, tamanho  # noqa: E402
 
-SAIDA = Path(__file__).resolve().parents[2] / "db" / "dados" / "catalogo_inicial.sql"
+SAIDA = Path(__file__).resolve().parents[2] / "db" / "dados" / "02_catalogo_inicial.sql"
 ESPACO = uuid.UUID("0c6a3f7e-2b1d-4e8a-9f55-31d2c4b7a901")
 
 # id, nome, unidade de comparação (R2). Categorias com embalagens de medidas diferentes comparam por unidade.

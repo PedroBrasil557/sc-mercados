@@ -1,6 +1,6 @@
 """Catalogador, versão 1 (determinística): os produtos mais vendidos de cada subcategoria do Giassi.
 
-Gera db/dados/catalogo_ampliado.sql. A API pública de catálogo do Giassi informa, por subcategoria, os
+Gera db/dados/03_catalogo_ampliado.sql. A API pública de catálogo do Giassi informa, por subcategoria, os
 produtos em ordem de venda (O=OrderByTopSaleDESC), com o código de barras. O código de barras é o mesmo
 em todas as redes, então a coleta diária já acha o preço de cada um no Giassi, na Cooper, no Angeloni e
 no Sam's (R1: mesmo produto = mesmo EAN de 14 dígitos).
@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from quantofica.coleta.vtex import ClienteHttp  # noqa: E402
 from quantofica.regras import ean, tamanho  # noqa: E402
 
-SAIDA = Path(__file__).resolve().parents[2] / "db" / "dados" / "catalogo_ampliado.sql"
+SAIDA = Path(__file__).resolve().parents[2] / "db" / "dados" / "03_catalogo_ampliado.sql"
 ESPACO = uuid.UUID("0c6a3f7e-2b1d-4e8a-9f55-31d2c4b7a901")  # o mesmo do catálogo inicial: o mesmo EAN vira o mesmo produto
 GIASSI = "https://www.giassi.com.br"
 POR_SUBCATEGORIA = 20

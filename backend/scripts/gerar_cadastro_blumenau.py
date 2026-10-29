@@ -1,4 +1,4 @@
-"""Gera db/dados/blumenau.sql: bairros, redes e lojas de Blumenau.
+"""Gera db/dados/01_blumenau.sql: bairros, redes e lojas de Blumenau.
 
 Fontes (consultadas uma vez, quando o script roda; o SQL gerado vai para o repositório):
 - Lojas com preço on-line: pontos de retirada públicos das próprias redes (VTEX), com endereço e coordenadas
@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from quantofica.coleta.redes import NOME_NO_BANCO, REDES_VTEX  # noqa: E402
 from quantofica.coleta.vtex import AGENTE, ClienteHttp  # noqa: E402
 
-SAIDA = Path(__file__).resolve().parents[2] / "db" / "dados" / "blumenau.sql"
+SAIDA = Path(__file__).resolve().parents[2] / "db" / "dados" / "01_blumenau.sql"
 OVERPASS = "https://overpass-api.de/api/interpreter"
 ESPACO = uuid.UUID("6f1b9a52-4c1e-4f0e-9d1a-7a0b8c3d2e10")  # ids estáveis: rodar de novo atualiza em vez de duplicar
 
