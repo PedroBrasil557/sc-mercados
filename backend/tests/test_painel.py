@@ -159,3 +159,18 @@ def test_decidir_em_lote_e_confirmar_loja(api, dados):
     assert api.post(f"/v1/painel/lojas/{dados['osm']}/confirmar", headers=ADMIN).status_code == 200
     assert api.get("/v1/painel/lojas", headers=ADMIN).json() == []
     assert api.post(f"/v1/painel/lojas/{dados['osm']}/confirmar", headers=ADMIN).status_code == 404
+
+
+def test_agentes_mostram_tipo_autonomia_e_se_estao_em_dia(api, banco_url):
+    from quantofica.agentes import revisor
+
+    with psycopg.connect(banco_url, autocommit=True, row_factory=dict_row) as conn:
+        revisor.rodar(conn, None, datetime.now(UTC), buscar_nos_sites=False)
+    r = api.get("/v1/painel/agentes", headers=ADMIN).json()
+    por_id = {a["id"]: a for a in r["agentes"]}
+    assert set(por_id) == {"coletor", "leitor_encartes", "vigia", "revisor"}
+    assert por_id["revisor"]["saude"] == "em dia"
+    assert por_id["coletor"]["saude"] == "nunca rodou"
+    assert all(a["tipo"] == "Programa de regras (sem IA)" for a in r["agentes"])
+    itens = api.get("/v1/painel/revisao", headers=ADMIN).json()
+    assert all("sugestao" in i for i in itens)

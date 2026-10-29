@@ -23,6 +23,7 @@ from zoneinfo import ZoneInfo
 import psycopg
 from psycopg.rows import dict_row
 
+from ..agentes import rodada
 from ..qualidade import monitor
 from ..qualidade.monitor import Anomalia
 from ..regras import ean as ean_util
@@ -121,7 +122,7 @@ class Catalogo:
     rede_do_site: dict[str, str]  # nome da rede -> id
 
 
-def _carregar_catalogo(conn) -> Catalogo:
+def carregar_catalogo(conn) -> Catalogo:
     linhas = conn.execute(
         """select p.id, p.nome_humano, p.marca, p.tamanho, p.unidade, p.categoria_id from produto p
            where exists (select 1 from ean e where e.produto_id = p.id and e.status = 'ok')"""
@@ -137,10 +138,12 @@ def _carregar_catalogo(conn) -> Catalogo:
     return Catalogo(candidatos, {k: c.most_common(1)[0][0] for k, c in tipos.items()}, redes)
 
 
-def _procurar_nos_sites(conn, http, catalogo: Catalogo, nome: str) -> list[str]:
+def procurar_nos_sites(conn, http, catalogo: Catalogo, nome: str, termos: str | None = None) -> list[str]:
     """Acha o item do encarte na busca dos sites; cria no catálogo o que casar. Devolve os produto_id."""
     for rede, dominio in SITES:
-        url = f"https://{dominio}/api/catalog_system/pub/products/search?ft={quote(termos_de_busca(nome))}&_from=0&_to=19"
+        url = (
+            f"https://{dominio}/api/catalog_system/pub/products/search?ft={quote(termos or termos_de_busca(nome))}&_from=0&_to=19"
+        )
         achados = [a for p in (http(url, None) or []) if (a := _do_site(p))]
         sku_do = {c.chave: sku for c, sku in achados}
         casados = casar(nome, [c for c, _ in achados])
@@ -203,6 +206,40 @@ def gravar_precos(conn, produto, lojas, preco_centavos, condicional_centavos, ag
     return n
 
 
+def validade_do_item(conn, rede_id, proposta: dict) -> date | None:
+    if proposta.get("valido_ate"):
+        return date.fromisoformat(proposta["valido_ate"])
+    linha = conn.execute(  # itens abertos antes de a proposta guardar a validade
+        "select valido_ate from encarte_lido where rede_id = %s and titulo = %s", (rede_id, proposta.get("encarte"))
+    ).fetchone()
+    return linha["valido_ate"] if linha else None
+
+
+def ligar_item(conn, item_id: str, proposta: dict, produtos: list[str], quem: str, agora: datetime) -> tuple[int, date | None]:
+    """Item do encarte (fila de revisão) -> produto(s): publica o preço se o encarte ainda vale, lembra o nome
+    para os próximos encartes e resolve o item. Usado pelo painel e pelo Revisor."""
+    rede_id = conn.execute("select id from rede where nome = %s", (REDE,)).fetchone()["id"]
+    valido_ate = validade_do_item(conn, rede_id, proposta)
+    precos = 0
+    if valido_ate and valido_ate >= agora.astimezone(FUSO).date():  # vencido: só lembra o nome, não publica preço velho
+        limite = datetime.combine(valido_ate, time(23, 59, 59), FUSO)
+        lojas = lojas_da_cidade(conn, rede_id)
+        for produto in produtos:
+            precos += gravar_precos(
+                conn, produto, lojas, proposta["preco_centavos"], proposta.get("condicional_centavos"),
+                agora, limite, f"fort:{quem}:{item_id}",
+            )  # fmt: skip
+    for produto in produtos:
+        conn.execute(
+            "insert into nome_no_encarte (rede_id, nome, produto_id) values (%s, %s, %s) on conflict do nothing",
+            (rede_id, nome_normalizado(proposta["nome"]), produto),
+        )
+    conn.execute(
+        "update fila_revisao set status = 'resolvida', revisado_por = %s, decidido_em = now() where id = %s", (quem, item_id)
+    )
+    return precos, valido_ate
+
+
 def rodar(conn, http, agora: datetime, ler=encarte_pdf.ler) -> dict:
     rede = conn.execute("select id from rede where nome = %s", (REDE,)).fetchone()
     if rede is None:
@@ -215,7 +252,7 @@ def rodar(conn, http, agora: datetime, ler=encarte_pdf.ler) -> dict:
     lidos = {
         r["encarte_id"] for r in conn.execute("select encarte_id from encarte_lido where rede_id = %s", (rede_id,)).fetchall()
     }
-    catalogo = _carregar_catalogo(conn)
+    catalogo = carregar_catalogo(conn)
     historico: dict[str, list[int]] = {}
     for r in conn.execute(
         "select produto_id, preco_centavos from observacao_preco where faixa = 'varejo' and observado_em >= %s",
@@ -250,7 +287,7 @@ def rodar(conn, http, agora: datetime, ler=encarte_pdf.ler) -> dict:
                         c.chave for c in casar(item.nome, catalogo.candidatos)
                     ]
                     if not produtos:
-                        produtos = _procurar_nos_sites(conn, http, catalogo, item.nome)
+                        produtos = procurar_nos_sites(conn, http, catalogo, item.nome)
                         resumo["produtos_novos"] += len(produtos)
                     proposta = {
                         "nome": item.nome,
@@ -289,7 +326,10 @@ def rodar(conn, http, agora: datetime, ler=encarte_pdf.ler) -> dict:
 
 def main() -> int:
     with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True, row_factory=dict_row) as conn:
-        print(rodar(conn, ClienteHttp(), datetime.now(UTC)))
+        with rodada(conn, "leitor_encartes") as resumo:
+            r = rodar(conn, ClienteHttp(), datetime.now(UTC))
+            resumo.update(r)
+            print(r)
     return 0
 
 

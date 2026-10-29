@@ -1,6 +1,6 @@
 name: Encartes
 
-# Lê os encartes novos do Fort Atacadista (Blumenau). Encarte já lido é pulado, então rodar todo dia
+# Lê os encartes novos do Fort Atacadista (Blumenau) e depois roda o Revisor sobre a fila de revisão. Encarte já lido é pulado, então rodar todo dia
 # custa poucas requisições; quando sai encarte novo, procura os itens no catálogo e nos sites.
 on:
   schedule:
@@ -31,3 +31,8 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python -m quantofica.coleta.fort
+      - name: Revisor (decide a fila de revisão)
+        if: always()
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m quantofica.agentes.revisor

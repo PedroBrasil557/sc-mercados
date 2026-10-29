@@ -20,6 +20,7 @@ from datetime import UTC, datetime, timedelta
 import psycopg
 from psycopg.rows import dict_row
 
+from ..agentes import rodada
 from ..qualidade import monitor
 from ..qualidade.monitor import Anomalia
 from ..regras.preco import Faixa
@@ -188,16 +189,23 @@ def main(argv: list[str] | None = None, http: Http | None = None) -> int:
     http = http or ClienteHttp()
     falhas = 0
     with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True, row_factory=dict_row) as conn:
-        for rede in config.REDES_VTEX:
-            if args.rede and rede.id != args.rede:
-                continue
-            try:
-                print(_rodar_rede(conn, http, rede, datetime.now(UTC)))
-            except Exception as erro:  # uma rede fora do ar não impede as outras
-                falhas += 1
-                print(f"{rede.id}: falhou: {erro!r}", file=sys.stderr)
-        for a in monitor.verificar(conn, datetime.now(UTC)):
-            print(f"anomalia: {a.referencia}: {a.motivo}", file=sys.stderr)
+        with rodada(conn, "coletor") as resumo:
+            for rede in config.REDES_VTEX:
+                if args.rede and rede.id != args.rede:
+                    continue
+                try:
+                    r = _rodar_rede(conn, http, rede, datetime.now(UTC))
+                    resumo[r["rede"]] = {"precos": r["precos"], "revisao": r["revisao"]}
+                    print(r)
+                except Exception as erro:  # uma rede fora do ar não impede as outras
+                    falhas += 1
+                    resumo[config.NOME_NO_BANCO[rede.id]] = {"falhou": repr(erro)[:300]}
+                    print(f"{rede.id}: falhou: {erro!r}", file=sys.stderr)
+        with rodada(conn, "vigia") as resumo:
+            achadas = monitor.verificar(conn, datetime.now(UTC))
+            resumo["apontados"] = len(achadas)
+            for a in achadas:
+                print(f"anomalia: {a.referencia}: {a.motivo}", file=sys.stderr)
     return 1 if falhas else 0
 
 
