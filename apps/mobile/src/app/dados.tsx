@@ -58,7 +58,7 @@ export default function Dados() {
         sem internet.
       </Bloco>
       <Bloco titulo="De onde vêm os preços">
-        Dos sites das próprias redes (Giassi, Cooper, Angeloni, Sam’s Club), conferidos todo dia, e dos encartes do Fort Atacadista.
+        Dos sites das próprias redes (Giassi, Cooper, Angeloni, Sam’s Club e Rede Top), conferidos todo dia, dos encartes do Fort Atacadista e do Komprão e dos cupons fiscais lidos no app (só o preço dos produtos, nunca quem comprou).
         Cada preço mostra de onde veio e quando. Não recebemos dinheiro de nenhum mercado.
       </Bloco>
       <Bloco titulo="Sobre as imagens">
