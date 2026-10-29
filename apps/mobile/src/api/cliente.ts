@@ -93,6 +93,9 @@ export type LojaComparada = {
   nome: string;
   bairro: string | null;
   distancia_km: number;
+  custo_viagem_centavos: number;
+  recomendada: boolean;
+  nota: string | null; // "R$ 12,72 mais barato na prateleira, mas ... Não compensa."
   total_centavos: number;
   fora_da_soma: string[];
   comparacao_parcial: boolean;
@@ -194,8 +197,8 @@ export const api = {
     pedir<CupomLido>("POST", "/v1/cupons", cupom),
   economia: () => pedir<{ mes: string; economia_centavos: number; cupons: number }>("GET", "/v1/economia"),
   /** Itens = produto -> quantidade, como estão no aparelho (inclui mudanças ainda não enviadas). */
-  comparar: (bairroId: string, itens: Record<string, number>, preferidas: string[] = []) =>
-    pedir<Comparacao>("POST", "/v1/comparar", { bairro_id: bairroId, itens, preferidas }),
+  comparar: (bairroId: string, itens: Record<string, number>, preferidas: string[] = [], custoKmCentavos = 90) =>
+    pedir<Comparacao>("POST", "/v1/comparar", { bairro_id: bairroId, itens, preferidas, custo_km_centavos: custoKmCentavos }),
   precosNaLoja: (lojaId: string, produtoIds: string[]) =>
     pedir<{ precos: Record<string, { preco_centavos: number; preco_de_centavos: number | null; fonte: string; observado_em: string }> }>(
       "GET",

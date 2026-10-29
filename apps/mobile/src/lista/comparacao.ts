@@ -26,6 +26,23 @@ export function lojasPreferidas(): Record<string, string> {
   return armazem.lerGuardado<Record<string, string>>(CHAVE_PREFERIDAS) ?? {};
 }
 
+/** Quanto custa cada km de ida e volta para a casa (R8): carro, moto ou não contar (a pé, ônibus, já passa perto). */
+export const OPCOES_DE_VIAGEM = [
+  { centavos: 90, nome: "Carro", detalhe: "cerca de R$ 0,90 por km, ida e volta" },
+  { centavos: 40, nome: "Moto", detalhe: "cerca de R$ 0,40 por km, ida e volta" },
+  { centavos: 0, nome: "Não contar", detalhe: "a pé, de ônibus ou quando já passo perto" },
+] as const;
+
+export function custoKm(): number {
+  return armazem.lerGuardado<number>("custo_km") ?? 90;
+}
+
+export function definirCustoKm(centavos: number): void {
+  armazem.guardar("custo_km", centavos);
+  ultimaChave = "";
+  ouvintes.forEach((f) => f());
+}
+
 /** A casa escolhe a loja de uma rede; a comparação passa a usar ela no lugar da mais perto. */
 export function escolherLoja(rede: string, lojaId: string): void {
   armazem.guardar(CHAVE_PREFERIDAS, { ...lojasPreferidas(), [rede]: lojaId });
@@ -55,7 +72,7 @@ async function calcular(chave: string, bairroId: string, itens: Record<string, n
   const meu = ++pedido;
   mudar({ carregando: true });
   try {
-    const dados = Object.keys(itens).length ? await api.comparar(bairroId, itens, Object.values(lojasPreferidas())) : null;
+    const dados = Object.keys(itens).length ? await api.comparar(bairroId, itens, Object.values(lojasPreferidas()), custoKm()) : null;
     if (meu !== pedido) return; // chegou uma resposta mais nova
     ultimaChave = chave;
     const calculadaEm = Date.now();
@@ -85,7 +102,7 @@ export function useComparacao(): EstadoDaComparacao & { atualizar: () => void } 
     return q;
   }, [itens]);
   const bairroId = sessao?.bairro_id ?? null;
-  const chave = bairroId ? `${bairroId}|${JSON.stringify(Object.entries(quantidades).sort())}|${JSON.stringify(lojasPreferidas())}` : "";
+  const chave = bairroId ? `${bairroId}|${JSON.stringify(Object.entries(quantidades).sort())}|${JSON.stringify(lojasPreferidas())}|${custoKm()}` : "";
 
   useEffect(() => {
     if (!bairroId) return;

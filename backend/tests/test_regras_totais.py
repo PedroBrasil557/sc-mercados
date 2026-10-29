@@ -86,3 +86,25 @@ class TestEconomia:
 
     def test_economia_negativa_vira_zero(self):
         assert economia.calcular(50000, {"A": 40000, "B": 41000}).economia_centavos == 0
+
+
+class TestRecomendar:
+    DIST = {"angeloni": 7.1, "giassi": 6.8, "mafisa": 2.3}
+
+    def test_itoupavazinha_fica_na_cooper_mafisa(self):
+        # Caso relatado pelo Pedro: o mais barato na prateleira ficava a 7,1 km
+        r = totais.recomendar({"angeloni": 12277, "giassi": 12748, "mafisa": 13549}, self.DIST, 90)
+        assert (r.loja, r.mais_perto, r.economia_na_prateleira_centavos) == ("mafisa", "mafisa", 0)
+
+    def test_longe_vale_quando_a_economia_paga_a_viagem_e_sobra(self):
+        # 40 reais mais barato: paga os ~8,64 da viagem a mais e sobra bem mais que 10
+        r = totais.recomendar({"angeloni": 9549, "mafisa": 13549}, self.DIST, 90)
+        assert (r.loja, r.economia_na_prateleira_centavos) == ("angeloni", 4000)
+
+    def test_sem_custo_de_viagem_ainda_exige_a_folga(self):
+        # A pé/ônibus (custo 0): 12,72 mais barato passa da folga de 10
+        assert totais.recomendar({"angeloni": 12277, "mafisa": 13549}, self.DIST, 0).loja == "angeloni"
+        assert totais.recomendar({"angeloni": 12949, "mafisa": 13549}, self.DIST, 0).loja == "mafisa"
+
+    def test_lista_vazia(self):
+        assert totais.recomendar({}, {}, 90) is None

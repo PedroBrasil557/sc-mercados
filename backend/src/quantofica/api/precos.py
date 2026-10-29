@@ -84,6 +84,14 @@ class PedidoComparacao(BaseModel):
         return self
 
 
+def _reais(centavos: int) -> str:
+    return "R$\u00a0" + f"{centavos / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _km(valor: float) -> str:
+    return f"{valor:.1f}".replace(".", ",") + "\u00a0km"
+
+
 def _centavos(v) -> int:
     return int(Decimal(v).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
@@ -155,6 +163,27 @@ def comparar(pedido: PedidoComparacao, membro: MembroAtual, conn: Conexao):
                 custos[(a, b)] = round(extras_km[(a, b)] * pedido.custo_km_centavos)
     div = totais.melhor_divisao(itens, tabela, custos)
 
+    # Melhor loja para a casa: a mais perto, a não ser que outra pague a viagem a mais e sobre 10 reais (R8).
+    rec = totais.recomendar(
+        {k: _centavos(v) for k, v in comp.totais.items()}, {k: dist[k] for k in escolhidas}, pedido.custo_km_centavos
+    )
+    viagem = {k: totais.custo_deslocamento_centavos(dist[k], pedido.custo_km_centavos) for k in escolhidas}
+
+    def nota(loja_id: str) -> str | None:
+        if rec is None or loja_id == rec.loja:
+            return None
+        economia = _centavos(comp.totais[rec.loja]) - _centavos(comp.totais[loja_id])
+        if economia <= 0:
+            return None
+        a_mais = max(0, viagem[loja_id] - viagem[rec.loja])
+        km_a_mais = max(0.0, dist[loja_id] - dist[rec.loja])
+        return (
+            f"{_reais(economia)} mais barato na prateleira, mas a ida e volta a {_km(km_a_mais)} a mais custa "
+            f"~{_reais(a_mais)}. Não compensa."
+            if a_mais
+            else f"{_reais(economia)} mais barato, mas a diferença é pequena para trocar de mercado."
+        )
+
     def info_loja(loja_id: str) -> dict:
         precos_usados = [atuais.get(loja_id, {})[p] for p in comp.comuns if p in atuais.get(loja_id, {})]
         return {
@@ -163,6 +192,9 @@ def comparar(pedido: PedidoComparacao, membro: MembroAtual, conn: Conexao):
             "nome": escolhidas[loja_id]["nome"],
             "bairro": escolhidas[loja_id]["bairro"],
             "distancia_km": round(dist[loja_id], 1),
+            "custo_viagem_centavos": viagem[loja_id],
+            "recomendada": rec is not None and loja_id == rec.loja,
+            "nota": nota(loja_id),
             "total_centavos": _centavos(comp.totais[loja_id]),
             "fora_da_soma": comp.fora_da_soma[loja_id],
             "comparacao_parcial": comp.parcial[loja_id],
@@ -174,7 +206,9 @@ def comparar(pedido: PedidoComparacao, membro: MembroAtual, conn: Conexao):
         "comuns": len(comp.comuns),
         "itens": len(itens),
         "redes_sem_preco": sem_preco,
-        "lojas": [info_loja(lj) for lj in comp.ordem],
+        # A recomendada primeiro; as outras pelo total da prateleira.
+        "lojas": [info_loja(lj) for lj in sorted(comp.ordem, key=lambda lj: rec is None or lj != rec.loja)],
+        "custo_km_centavos": pedido.custo_km_centavos,
         "divisao": None
         if div is None
         else {

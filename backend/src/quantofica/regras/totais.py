@@ -64,6 +64,35 @@ def melhor_divisao(lista: dict[str, int], precos: Precos, custo_extra_centavos: 
     return melhor
 
 
+@dataclass(frozen=True)
+class Recomendacao:
+    loja: str
+    mais_perto: str
+    economia_na_prateleira_centavos: int  # da recomendada frente à mais perto (0 se for a mesma)
+
+
+def recomendar(totais: dict[str, int], distancia_km: dict[str, float], custo_km_centavos: int) -> Recomendacao | None:
+    """A melhor loja para a casa (R8 aplicada a uma loja só): a mais perto, a menos que outra economize
+    mais do que a ida e volta a mais custa, com a folga de 10 reais.
+
+    Caso real (28/10/2026, Itoupavazinha, rancho): Angeloni Velha 122,77 a 7,1 km; Cooper Mafisa 135,49 a 2,3 km.
+    O Angeloni economiza 12,72, mas a viagem a mais custa 8,64 (+10 de folga): fica a Cooper Mafisa.
+    """
+    if not totais:
+        return None
+    perto = min(totais, key=lambda loja: (distancia_km.get(loja, 0.0), totais[loja]))
+    melhor, ganho_melhor = perto, 0
+    for loja, total in totais.items():
+        economia = totais[perto] - total
+        viagem_a_mais = custo_deslocamento_centavos(
+            max(0.0, distancia_km.get(loja, 0.0) - distancia_km.get(perto, 0.0)), custo_km_centavos
+        )
+        ganho = economia - viagem_a_mais
+        if economia > viagem_a_mais + FOLGA_DIVISAO_CENTAVOS and ganho > ganho_melhor:
+            melhor, ganho_melhor = loja, ganho
+    return Recomendacao(melhor, perto, totais[perto] - totais[melhor])
+
+
 def distancia_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Distância em linha reta (haversine) do centro do bairro até a loja (R14)."""
     r = 6371.0

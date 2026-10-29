@@ -187,10 +187,20 @@ def test_comparar_usa_a_loja_mais_proxima_de_cada_rede(api, dados, casa):
     assert r["redes_sem_preco"] == []  # as duas redes do teste têm preço
 
 
+def test_comparar_recomenda_a_mais_perto_quando_ir_longe_nao_compensa(api, dados, casa):
+    # Giassi (0,4 km) 25,90 x Cooper Itoupava Seca (1,1 km) 24,90: 1 real não paga a viagem nem a folga de 10
+    pedido = {"bairro_id": str(dados["bairro"]), "itens": {str(dados["arroz"]): 1}}
+    lojas = api.post("/v1/comparar", headers=casa["ana"], json=pedido).json()["lojas"]
+    assert [(lj["nome"], lj["recomendada"]) for lj in lojas] == [("Giassi Victor Konder", True), ("Cooper Itoupava Seca", False)]
+    assert lojas[1]["nota"].startswith("R$\u00a01,00 mais barato na prateleira")
+    assert 0 < lojas[0]["custo_viagem_centavos"] < lojas[1]["custo_viagem_centavos"]
+
+
 def test_comparar_com_a_loja_preferida_da_rede(api, dados, casa):
     pedido = {"bairro_id": str(dados["bairro"]), "itens": {str(dados["arroz"]): 1}, "preferidas": [str(dados["cooper_longe"])]}
     lojas = api.post("/v1/comparar", headers=casa["ana"], json=pedido).json()["lojas"]
-    assert [lj["nome"] for lj in lojas] == ["Cooper Garcia", "Giassi Victor Konder"]
+    # A Cooper usada é a preferida (Garcia), não a mais perto; a recomendada continua sendo a melhor para a casa
+    assert {lj["nome"] for lj in lojas} == {"Cooper Garcia", "Giassi Victor Konder"}
 
 
 def test_comparar_a_partir_da_lista(api, dados, casa):

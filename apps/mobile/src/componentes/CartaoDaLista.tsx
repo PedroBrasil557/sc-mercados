@@ -10,8 +10,9 @@ import { Icone } from "./Icone";
 /** Figma "Cartão da lista" (Início): total no mercado mais barato e quanto a mais custa nos outros. */
 export function CartaoDaLista({ rotulo, comparacao, aoComparar }: { rotulo: string; comparacao: Comparacao; aoComparar: () => void }) {
   const { cor } = useTema();
-  const [primeira, ...outras] = comparacao.lojas;
+  const [primeira, ...outras] = comparacao.lojas; // a recomendada vem primeiro
   if (!primeira) return null;
+  const etiqueta = outras.every((l) => primeira.total_centavos <= l.total_centavos) ? "Mais barato" : "Melhor para você";
   const selo = primeira.preco_mais_antigo_em ? `${seloDeFonte("site", primeira.preco_mais_antigo_em)} · SEM TAXA` : "SEM TAXA";
   return (
     <View style={[estilos.cartao, { backgroundColor: cor.fundoProfundo }]}>
@@ -21,7 +22,7 @@ export function CartaoDaLista({ rotulo, comparacao, aoComparar }: { rotulo: stri
         <Text numberOfLines={1} style={[fonte("corpoForte"), { color: cor.textoInverso, flexShrink: 1 }]}>
           no {primeira.nome}
         </Text>
-        {outras.length ? <EtiquetaDePreco /> : null}
+        {outras.length ? <EtiquetaDePreco texto={etiqueta} /> : null}
       </View>
       {outras.length ? <View style={[estilos.divisoria, { backgroundColor: cor.sobreposicaoDivisor }]} /> : null}
       {outras.slice(0, 3).map((l) => (
