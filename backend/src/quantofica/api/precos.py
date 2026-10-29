@@ -113,7 +113,7 @@ def comparar(pedido: PedidoComparacao, membro: MembroAtual, conn: Conexao):
     else:
         itens = {str(k): v for k, v in pedido.itens.items()}
     if not itens:
-        return {"lojas": [], "comuns": 0, "itens": 0, "divisao": None, "redes_sem_preco": []}
+        return {"lojas": [], "comuns": 0, "itens": 0, "divisao": None, "redes_sem_preco": [], "lojas_com_poucos_itens": []}
 
     # R13: a loja mais próxima de cada rede, pela distância do centro do bairro (R14)
     lojas = conn.execute(
@@ -147,8 +147,13 @@ def comparar(pedido: PedidoComparacao, membro: MembroAtual, conn: Conexao):
         key=lambda r: r["distancia_km"],
     )
     if not escolhidas:
-        return {"lojas": [], "comuns": 0, "itens": len(itens), "divisao": None, "redes_sem_preco": sem_preco}
+        vazio = {"lojas": [], "comuns": 0, "divisao": None, "lojas_com_poucos_itens": []}
+        return {**vazio, "itens": len(itens), "redes_sem_preco": sem_preco}
     tabela = {loja: {p: e.observacao.preco_centavos for p, e in atuais[loja].items()} for loja in escolhidas}
+    # Loja com poucos itens da lista (ex.: Fort, só o encarte) sai do total justo e aparece à parte.
+    dentro = totais.nucleo(itens, tabela)
+    poucos = {k: escolhidas.pop(k) for k in list(escolhidas) if k not in dentro}
+    tabela_poucos = {k: tabela.pop(k) for k in poucos}
     comp = totais.comparar(itens, tabela, {k: dist[k] for k in escolhidas})
 
     coords = {k: (lj["lat"], lj["lon"]) for k, lj in escolhidas.items()}
@@ -202,10 +207,35 @@ def comparar(pedido: PedidoComparacao, membro: MembroAtual, conn: Conexao):
             "algum_preco_pode_ter_mudado": any(p.estado is Estado.PODE_TER_MUDADO for p in precos_usados),
         }
 
+    referencia = rec.loja if rec else comp.ordem[0]
+
+    def info_poucos(loja_id: str) -> dict:
+        tem = [p for p in itens if p in tabela_poucos[loja_id]]
+        # Os mesmos itens na loja recomendada, para dizer se vale a pena (só os que as duas vendem).
+        mesmos = [p for p in tem if p in tabela[referencia]]
+        validades = [atuais[loja_id][p].observacao.valido_ate for p in tem if atuais[loja_id][p].observacao.valido_ate]
+        return {
+            "loja_id": loja_id,
+            "rede": poucos[loja_id]["rede"],
+            "nome": poucos[loja_id]["nome"],
+            "bairro": poucos[loja_id]["bairro"],
+            "distancia_km": round(dist[loja_id], 1),
+            "itens": tem,
+            "total_centavos": _centavos(sum(tabela_poucos[loja_id][p] * itens[p] for p in tem)),
+            "mesmos_itens": len(mesmos),
+            "mesmos_itens_aqui_centavos": _centavos(sum(tabela_poucos[loja_id][p] * itens[p] for p in mesmos)),
+            "mesmos_itens_na_recomendada_centavos": _centavos(sum(tabela[referencia][p] * itens[p] for p in mesmos)),
+            "valido_ate": min(validades, default=None),
+        }
+
     return {
         "comuns": len(comp.comuns),
         "itens": len(itens),
         "redes_sem_preco": sem_preco,
+        "lojas_com_poucos_itens": sorted(
+            (info_poucos(k) for k in poucos),
+            key=lambda x: x["mesmos_itens_aqui_centavos"] - x["mesmos_itens_na_recomendada_centavos"],
+        ),
         # A recomendada primeiro; as outras pelo total da prateleira.
         "lojas": [info_loja(lj) for lj in sorted(comp.ordem, key=lambda lj: rec is None or lj != rec.loja)],
         "custo_km_centavos": pedido.custo_km_centavos,
