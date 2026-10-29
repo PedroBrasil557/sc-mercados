@@ -19,7 +19,7 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from ..coleta import fort
+from ..coleta import cupom, fort
 from ..coleta.casamento import PARE, VARIOS, Candidato, casar, palavras
 from ..coleta.vtex import ClienteHttp
 from ..regras import tamanho as tam
@@ -43,6 +43,7 @@ class Decisao:
     motivo: str
     produtos: list[str] = field(default_factory=list)
     conferido: list[str] = field(default_factory=list)  # o que o Revisor olhou antes de decidir
+    loja: dict | None = None  # cupom de loja sem cadastro: a loja sugerida ({id, nome})
 
 
 def _reais(c: int) -> str:
@@ -203,6 +204,22 @@ def decidir_embalagem(motivo: str) -> Decisao:
     )
 
 
+def decidir_cupom(proposta: dict, rede: str | None, lojas: list[dict]) -> Decisao:
+    """Cupom de loja sem CNPJ no cadastro. Nunca liga sozinho: o cupom não diz a cidade da loja."""
+    conferido = ["nome do emitente", "lojas da rede sem CNPJ"]
+    emitente = proposta.get("emitente") or "emitente não lido"
+    if rede and len(lojas) == 1:
+        lj = lojas[0]
+        return Decisao("sugerir", 0.75, f"{emitente} é da rede {rede}, e a única loja dela em Blumenau ainda sem CNPJ é "
+                       f"{lj['nome']}. Confira o endereço no cupom antes de aceitar.", conferido=conferido,
+                       loja={"id": str(lj["id"]), "nome": lj["nome"]})  # fmt: skip
+    if rede and lojas:
+        return Decisao("humano", 0.5, f"{emitente} é da rede {rede}, que tem {len(lojas)} lojas sem CNPJ: escolha pelo "
+                       "endereço do cupom.", conferido=conferido)  # fmt: skip
+    return Decisao("humano", 0.4, f"Não achei a rede de “{emitente}” no cadastro. Se for um mercado de Blumenau, escolha a "
+                   "loja; se for de outra cidade, descarte.", conferido=conferido)  # fmt: skip
+
+
 # ---------- rodada ----------
 
 
@@ -248,6 +265,8 @@ def _rodar(conn, http, agora, buscar_nos_sites, resumo) -> None:
             d = decidir_preco(item, _mediana(conn, item["referencia_id"], agora), agora)
         elif tipo == "anomalia" and motivo.startswith(("coletor parado", "cobertura caiu")):
             d = decidir_coleta(_ultima_coleta_ok(conn, item["referencia_id"]), agora)
+        elif tipo == "cupom" and item["proposta"]:
+            d = decidir_cupom(item["proposta"], *cupom.lojas_candidatas(conn, item["proposta"].get("emitente")))
         else:
             d = Decisao("humano", 0.3, "Tipo de item que o Revisor ainda não sabe decidir: precisa de uma pessoa.")
 
@@ -273,7 +292,7 @@ def _rodar(conn, http, agora, buscar_nos_sites, resumo) -> None:
                 (
                     VERSAO, str(item["id"]),
                     Jsonb({"acao": d.acao, "motivo": d.motivo, "produtos": d.produtos,
-                           "conferido": d.conferido, "aplicada": aplicada}),
+                           "conferido": d.conferido, "aplicada": aplicada, "loja": d.loja}),
                     d.confianca, Jsonb(d.conferido),
                     ("descartado" if d.acao == "descartar" else "publicado") if aplicada else "fila",
                     rodada_id,

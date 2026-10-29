@@ -168,7 +168,7 @@ def test_agentes_mostram_tipo_autonomia_e_se_estao_em_dia(api, banco_url):
         revisor.rodar(conn, None, datetime.now(UTC), buscar_nos_sites=False)
     r = api.get("/v1/painel/agentes", headers=ADMIN).json()
     por_id = {a["id"]: a for a in r["agentes"]}
-    assert set(por_id) == {"coletor", "leitor_encartes", "vigia", "revisor"}
+    assert set(por_id) == {"catalogador", "coletor", "leitor_encartes", "vigia", "revisor"}
     assert por_id["revisor"]["saude"] == "em dia"
     assert por_id["coletor"]["saude"] == "nunca rodou"
     assert all(a["tipo"] == "Programa de regras (sem IA)" for a in r["agentes"])

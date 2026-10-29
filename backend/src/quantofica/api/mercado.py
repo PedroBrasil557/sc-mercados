@@ -24,6 +24,7 @@ from .precos import precos_atuais
 router = APIRouter(prefix="/v1", tags=["seu mercado"])
 
 PERTO_KM = 5.0
+MAX_CANDIDATOS = 600
 
 
 @router.get("/mercados")
@@ -162,16 +163,24 @@ def busca(
             continue
         achados.append((pontos, p))
 
+    # Com o catálogo inteiro das redes (milhares de itens), só os mais relevantes recebem preço e filtros.
+    achados.sort(key=lambda x: -x[0])
+    achados = achados[:MAX_CANDIDATOS]
+
     seu = ctx.seu_mercado
     lojas_consideradas = {str(lj["id"]): lj for lj in ctx.por_rede.values()}
     if seu:
         lojas_consideradas[str(seu["id"])] = seu
     agora = datetime.now(UTC)
     atuais = precos_atuais(conn, list(lojas_consideradas), [p["id"] for _, p in achados], agora) if achados else {}
+    por_produto: dict[str, list] = {}
+    for lid, por in atuais.items():
+        for pid, ex in por.items():
+            por_produto.setdefault(pid, []).append((lid, ex))
 
     linhas = []
     for pontos, p in achados:
-        precos = [(lid, ex) for lid, por in atuais.items() for pid, ex in por.items() if pid == p["id"]]
+        precos = por_produto.get(p["id"], [])
         no_seu = next((ex for lid, ex in precos if seu and lid == str(seu["id"])), None)
         perto = [(lid, ex) for lid, ex in precos if lojas_consideradas[lid]["distancia_km"] <= PERTO_KM]
         mais_barato = min(precos, key=lambda x: x[1].observacao.preco_centavos, default=None)

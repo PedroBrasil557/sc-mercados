@@ -32,11 +32,12 @@ def test_preco_igual_so_confirma_e_preco_novo_vai_para_o_historico(banco_url):
         }
         historico = c.execute("select preco_centavos from observacao_preco order by observado_em").fetchall()
         assert [h["preco_centavos"] for h in historico] == [2590, 2490]
-        atual = c.execute("select preco_centavos, observado_em, desde from preco_atual").fetchone()
-        assert (atual["preco_centavos"], atual["desde"], atual["observado_em"]) == (
+        atual = c.execute("select preco_centavos, observado_em, desde, anterior_centavos from preco_atual").fetchone()
+        assert (atual["preco_centavos"], atual["desde"], atual["observado_em"], atual["anterior_centavos"]) == (
             2490,
             dia + timedelta(days=2),
             dia + timedelta(days=2),
+            2590,  # o primeiro preço visto não tem anterior; a mudança tem (e só ela pode virar oferta)
         )
 
 

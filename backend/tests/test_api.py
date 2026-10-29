@@ -314,6 +314,10 @@ def test_cupom_calcula_a_economia_so_com_os_itens_reconhecidos(api, banco_url, c
     assert api.get("/v1/economia", headers=casa["ana"]).json()["economia_centavos"] == 250
     with psycopg.connect(banco_url) as c:
         assert c.execute("select count(*) from codigo_item_loja where codigo_interno = '1234'").fetchone()[0] == 1
+        # A loja do cupom (CNPJ da chave) não está no cadastro: o preço do arroz fica guardado para a revisão.
+        item = c.execute("select referencia_id, proposta_agente from fila_revisao where tipo = 'cupom'").fetchone()
+        assert item[0] == "cnpj:12345678000199"
+        assert [x["preco_centavos"] for x in item[1]["precos"]] == [2290]
 
 
 def test_codigo_de_recuperacao_leva_a_mesma_lista_para_outro_celular(api, casa):

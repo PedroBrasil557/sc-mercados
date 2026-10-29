@@ -135,7 +135,8 @@ def _rodar_rede(conn: psycopg.Connection, http: Http, rede: Rede, agora: datetim
         ).fetchall():
             historico.setdefault(str(r["produto_id"]), []).append(r["preco_centavos"])
 
-        # Cache: o SKU de cada produto nesta rede (achado antes) e o que a rede não vende (por 7 dias).
+        # Cache: o SKU de cada produto nesta rede e o que a rede não vende. O Catalogador refaz os dois toda semana;
+        # a janela de 10 dias cobre um atraso dele sem a coleta sair procurando milhares de produtos um a um.
         conhecidos = {
             r["codigo"]: (r["sku"], r["nome_no_site"] or "")
             for r in conn.execute(
@@ -147,7 +148,7 @@ def _rodar_rede(conn: psycopg.Connection, http: Http, rede: Rede, agora: datetim
         ausentes = {
             r["codigo"]
             for r in conn.execute(
-                "select codigo from ean_ausente where rede_id = %s and verificado_em > %s", (rede_id, agora - timedelta(days=7))
+                "select codigo from ean_ausente where rede_id = %s and verificado_em > %s", (rede_id, agora - timedelta(days=10))
             ).fetchall()
         }
         nao_encontrados: list[str] = []

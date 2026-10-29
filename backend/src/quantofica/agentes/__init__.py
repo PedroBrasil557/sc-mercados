@@ -26,6 +26,15 @@ class Agente:
 
 AGENTES = [
     Agente(
+        "catalogador",
+        "Catalogador",
+        "Percorre as seções de mercado do Giassi, da Cooper e do Angeloni, cadastra os produtos novos e liga cada "
+        "produto ao código dele em cada rede (Sam's também).",
+        "Domingo às 2h",
+        "Roda e publica sozinho. Só entra produto à venda, com código de barras válido e tamanho no nome.",
+        timedelta(days=8),
+    ),
+    Agente(
         "coletor",
         "Coletor de preços",
         "Busca o preço de cada produto do catálogo nos sites do Giassi, da Cooper, do Angeloni, do Sam's e da Rede Top, "

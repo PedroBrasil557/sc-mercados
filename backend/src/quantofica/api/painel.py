@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from ..agentes import AGENTES
-from ..coleta import fort
+from ..coleta import cupom, fort
 from .banco import Conexao
 from .limite import LimiteDeTaxa
 from .produtos import _CONDICAO
@@ -96,6 +96,8 @@ def revisao(
     for i in itens:
         if i["sugestao"]:
             i["sugestao"]["produtos"] = [{"id": pid, "nome": nomes.get(pid, pid)} for pid in i["sugestao"].get("produtos") or []]
+        if i["tipo"] == "cupom" and i["proposta"]:
+            i["proposta"]["n_precos"] = len(i["proposta"].pop("precos", None) or [])  # a tela só mostra quantos
     return itens
 
 
@@ -169,6 +171,30 @@ def ligar(item_id: UUID, ligacao: Ligacao, conn: Conexao):
             raise HTTPException(422, "produto não encontrado")
         precos, valido_ate = fort.ligar_item(conn, str(item_id), item["p"], sorted(existentes), "painel", datetime.now(UTC))
     return {"precos": precos, "valido_ate": valido_ate}
+
+
+class LigacaoCnpj(BaseModel):
+    loja_id: UUID
+
+
+@router.post("/revisao/{item_id}/cnpj")
+def ligar_cnpj(item_id: UUID, ligacao: LigacaoCnpj, conn: Conexao):
+    """Cupom de loja sem cadastro: liga o CNPJ à loja e publica os preços guardados dos cupons."""
+    with conn.transaction():
+        try:
+            return cupom.ligar_cnpj(conn, str(item_id), str(ligacao.loja_id), "painel", datetime.now(UTC))
+        except LookupError as erro:
+            raise HTTPException(404, str(erro)) from erro
+        except ValueError as erro:
+            raise HTTPException(409, str(erro)) from erro
+
+
+@router.get("/lojas/todas")
+def todas_as_lojas(conn: Conexao):
+    return conn.execute(
+        """select l.id, r.nome as rede, l.nome, l.endereco, l.cnpj from loja l join rede r on r.id = l.rede_id
+           order by r.nome, l.nome"""
+    ).fetchall()
 
 
 @router.get("/produtos")

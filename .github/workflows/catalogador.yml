@@ -1,0 +1,38 @@
+name: Catalogador
+
+# Percorre as seções de mercado do Giassi, da Cooper, do Angeloni e do Sam's (1 requisição por segundo),
+# cadastra os produtos novos e liga cada produto ao SKU dele em cada rede. Roda antes da coleta de domingo.
+on:
+  schedule:
+    - cron: "0 5 * * 0"  # domingo às 2h de Brasília
+  workflow_dispatch:
+    inputs:
+      rede:
+        description: "Só uma rede (giassi, cooper, angeloni, sams). Vazio = todas."
+        required: false
+
+concurrency:
+  group: coleta
+  cancel-in-progress: false
+
+jobs:
+  catalogar:
+    if: vars.COLETA_ATIVA == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - run: python -m pip install .
+      - name: Catalogar
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REDE: ${{ inputs.rede }}
+        run: python -m quantofica.coleta.catalogador ${REDE:+--rede "$REDE"}

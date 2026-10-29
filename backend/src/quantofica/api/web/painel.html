@@ -184,6 +184,11 @@ function cartaoDeRevisao(it, marcados, atualizar, decidir) {
     corpo.append(el("h3", {}, p.nome || it.referencia_id),
       el("div", {}, el("span", { class: "preco" }, reais(p.preco_centavos)), p.condicional_centavos ? ` · clube/cartão ${reais(p.condicional_centavos)}` : "", el("span", { class: "suave" }, ` · ${p.encarte || ""} · pág. ${p.pagina || "?"}`)));
     corpo.append(ligador(it, p));
+  } else if (it.tipo === "cupom") {
+    corpo.append(el("h3", {}, p.emitente || "Cupom de loja sem cadastro"),
+      el("div", {}, `CNPJ ${p.cnpj} · ${p.cupons || 1} cupom(ns) · ${p.n_precos || 0} preço(s) guardado(s)`),
+      el("div", { class: "suave" }, "Ligue o CNPJ à loja certa (veja o endereço no cupom): os preços guardados são publicados."));
+    corpo.append(seletorDeLoja(it));
   } else {
     corpo.append(el("h3", {}, TIPOS[it.tipo] || it.tipo), el("div", {}, it.motivo), el("div", { class: "suave" }, it.referencia_id),
       p.preco_centavos ? el("div", { class: "suave" }, `Preço proposto: ${reais(p.preco_centavos)}`) : null);
@@ -201,7 +206,9 @@ function caixaDeSugestao(it, decidir) {
   const s = it.sugestao, conf = Math.round((it.sugestao_confianca || 0) * 100);
   const produtos = s.produtos || [];
   let aceitar = null;
-  if (it.tipo === "encarte" && produtos.length) {
+  if (it.tipo === "cupom" && s.loja) {
+    aceitar = el("button", { class: "botao primario", onclick: (ev) => ligarCnpj(it.id, s.loja.id, ev.target) }, `Aceitar: ligar a ${s.loja.nome}`);
+  } else if (it.tipo === "encarte" && produtos.length) {
     aceitar = el("button", { class: "botao primario", onclick: async (ev) => {
       ev.target.disabled = true;
       try { await api(`/v1/painel/revisao/${it.id}/ligar`, { method: "POST", body: JSON.stringify({ produto_ids: produtos.map((x) => x.id) }) }); await carregarRevisao(); }
@@ -246,6 +253,29 @@ async function carregarAgentes() {
           el("td", {}, d.saida.aplicada ? el("span", { class: "ok" }, `fez sozinho: ${ACOES[d.saida.acao] || d.saida.acao}`) : (ACOES[d.saida.acao] || d.saida.acao)),
           el("td", {}, `${Math.round(d.confianca * 100)}%`), el("td", {}, d.saida.motivo))))) : el("p", { class: "suave" }, "O Revisor ainda não rodou."));
   } catch (e) { s.replaceChildren(); aviso(s, e.message, true); }
+}
+
+let lojasTodas = null;
+async function ligarCnpj(itemId, lojaId, botao) {
+  botao.disabled = true;
+  try {
+    const r = await api(`/v1/painel/revisao/${itemId}/cnpj`, { method: "POST", body: JSON.stringify({ loja_id: lojaId }) });
+    alert(`CNPJ ligado. ${r.publicados} preço(s) publicado(s)` + (r.revisao ? `, ${r.revisao} para revisão.` : "."));
+    await carregarRevisao();
+  } catch (e) { botao.disabled = false; alert(e.message); }
+}
+function seletorDeLoja(it) {
+  const escolha = el("select", { "aria-label": "Loja" }, el("option", { value: "" }, "Carregando lojas…"));
+  const botao = el("button", { class: "botao primario", disabled: true, onclick: () => ligarCnpj(it.id, escolha.value, botao) }, "Ligar CNPJ a esta loja");
+  escolha.onchange = () => { botao.disabled = !escolha.value; };
+  (async () => {
+    try {
+      lojasTodas = lojasTodas || await api("/v1/painel/lojas/todas");
+      escolha.replaceChildren(el("option", { value: "" }, "Escolha a loja…"),
+        lojasTodas.filter((l) => !l.cnpj).map((l) => el("option", { value: l.id }, `${l.rede} · ${l.nome}${l.endereco ? " · " + l.endereco : ""}`)));
+    } catch (e) { escolha.replaceChildren(el("option", { value: "" }, e.message)); }
+  })();
+  return el("div", { class: "busca" }, escolha, botao);
 }
 
 function ligador(it, p) {
