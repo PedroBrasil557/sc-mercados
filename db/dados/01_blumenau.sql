@@ -46,7 +46,7 @@ insert into rede (nome, site, tem_api) values ('Brasil Atacadista', null, false)
 insert into rede (nome, site, tem_api) values ('Carol', null, false) on conflict (nome) do update set site = excluded.site, tem_api = excluded.tem_api;
 insert into rede (nome, site, tem_api) values ('Casa Express', null, false) on conflict (nome) do update set site = excluded.site, tem_api = excluded.tem_api;
 insert into rede (nome, site, tem_api) values ('Cooper', 'www.minhacooper.com.br', true) on conflict (nome) do update set site = excluded.site, tem_api = excluded.tem_api;
-insert into rede (nome, site, tem_api) values ('Fort Atacadista', null, false) on conflict (nome) do update set site = excluded.site, tem_api = excluded.tem_api;
+insert into rede (nome, site, tem_api) values ('Fort Atacadista', 'www.fortatacadista.com.br', true) on conflict (nome) do update set site = excluded.site, tem_api = excluded.tem_api;
 insert into rede (nome, site, tem_api) values ('Giassi', 'www.giassi.com.br', true) on conflict (nome) do update set site = excluded.site, tem_api = excluded.tem_api;
 insert into rede (nome, site, tem_api) values ('Komprão', null, false) on conflict (nome) do update set site = excluded.site, tem_api = excluded.tem_api;
 insert into rede (nome, site, tem_api) values ('Mavili', null, false) on conflict (nome) do update set site = excluded.site, tem_api = excluded.tem_api;

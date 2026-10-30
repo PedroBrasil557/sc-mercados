@@ -39,6 +39,11 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: python -m quantofica.coleta.komprao
+      - name: Fort (preços do site)
+        if: always()
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m quantofica.coleta.fort_site
       - name: Revisor (decide a fila de revisão)
         if: always()
         env:

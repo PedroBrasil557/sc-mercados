@@ -180,9 +180,9 @@ function cartaoDeRevisao(it, marcados, atualizar, decidir) {
   const p = it.proposta || {};
   const caixa = el("input", { type: "checkbox", "aria-label": "Marcar", onchange: (ev) => { ev.target.checked ? marcados.add(it.id) : marcados.delete(it.id); atualizar(); } });
   const corpo = el("div", {});
-  if (it.tipo === "encarte") {
-    corpo.append(el("h3", {}, p.nome || it.referencia_id),
-      el("div", {}, el("span", { class: "preco" }, reais(p.preco_centavos)), p.condicional_centavos ? ` · clube/cartão ${reais(p.condicional_centavos)}` : "", el("span", { class: "suave" }, ` · ${p.encarte || ""} · pág. ${p.pagina || "?"}`)));
+  if (it.tipo === "encarte" || p.origem === "fort-site") {
+    corpo.append(el("h3", {}, (p.origem === "fort-site" ? "Site do Fort · " : "") + (p.nome || it.referencia_id)),
+      el("div", {}, el("span", { class: "preco" }, reais(p.preco_centavos)), p.condicional_centavos ? ` · clube/cartão ${reais(p.condicional_centavos)}` : "", el("span", { class: "suave" }, p.origem === "fort-site" ? ` · ${p.marca || ""} · sem código de barras no site` : ` · ${p.encarte || ""} · pág. ${p.pagina || "?"}`)));
     corpo.append(ligador(it, p));
   } else if (it.tipo === "cupom") {
     corpo.append(el("h3", {}, p.emitente || "Cupom de loja sem cadastro"),
@@ -203,10 +203,16 @@ function cartaoDeRevisao(it, marcados, atualizar, decidir) {
 
 const ACOES = { descartar: "descartar", resolver: "marcar como resolvido", ligar: "ligar ao produto", sugerir: "sugere", humano: "precisa de você" };
 function caixaDeSugestao(it, decidir) {
+  const p = it.proposta || {};
   const s = it.sugestao, conf = Math.round((it.sugestao_confianca || 0) * 100);
   const produtos = s.produtos || [];
   let aceitar = null;
-  if (it.tipo === "cupom" && s.loja) {
+  if (p.origem === "fort-site" && produtos.length) {
+    aceitar = el("button", { class: "botao primario", onclick: async (ev) => {
+      ev.target.disabled = true;
+      try { await api(`/v1/painel/revisao/${it.id}/ligar`, { method: "POST", body: JSON.stringify({ produto_ids: produtos.map((x) => x.id) }) }); await carregarRevisao(); }
+      catch (e) { ev.target.disabled = false; alert(e.message); } } }, "Aceitar: é o mesmo produto");
+  } else if (it.tipo === "cupom" && s.loja) {
     aceitar = el("button", { class: "botao primario", onclick: (ev) => ligarCnpj(it.id, s.loja.id, ev.target) }, `Aceitar: ligar a ${s.loja.nome}`);
   } else if (it.tipo === "encarte" && produtos.length) {
     aceitar = el("button", { class: "botao primario", onclick: async (ev) => {

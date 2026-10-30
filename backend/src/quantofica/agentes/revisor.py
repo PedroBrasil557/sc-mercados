@@ -19,7 +19,7 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from ..coleta import cupom, fort
+from ..coleta import cupom, fort, fort_site
 from ..coleta.casamento import PARE, VARIOS, Candidato, casar, palavras
 from ..coleta.vtex import ClienteHttp
 from ..regras import tamanho as tam
@@ -204,6 +204,13 @@ def decidir_embalagem(motivo: str) -> Decisao:
     )
 
 
+def decidir_site_sem_ean(proposta: dict) -> Decisao:
+    """Produto do site do Fort que o casador de encarte liga, mas o estrito não: nunca liga sozinho (R1)."""
+    return Decisao("sugerir", 0.7, "O site do Fort não mostra código de barras e o nome não bate palavra por palavra com "
+                   "o do catálogo. Confira se é o mesmo produto (sabor, linha, embalagem) antes de aceitar.",
+                   produtos=list(proposta.get("produtos") or []), conferido=["nome", "marca", "tamanho"])  # fmt: skip
+
+
 def decidir_cupom(proposta: dict, rede: str | None, lojas: list[dict]) -> Decisao:
     """Cupom de loja sem CNPJ no cadastro. Nunca liga sozinho: o cupom não diz a cidade da loja."""
     conferido = ["nome do emitente", "lojas da rede sem CNPJ"]
@@ -257,6 +264,8 @@ def _rodar(conn, http, agora, buscar_nos_sites, resumo) -> None:
                     return fort.procurar_nos_sites(conn, http, catalogo, nome, termos)
 
             d = decidir_encarte(item["proposta"], hoje, valido, catalogo.candidatos, procurar)
+        elif tipo == "ean" and (item["proposta"] or {}).get("origem") == fort_site.ORIGEM:
+            d = decidir_site_sem_ean(item["proposta"])
         elif tipo == "ean":
             d = decidir_embalagem(motivo)
         elif tipo == "anomalia" and motivo.startswith("tamanho diferente"):
