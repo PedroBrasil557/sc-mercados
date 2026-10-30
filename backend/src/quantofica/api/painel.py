@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from ..agentes import AGENTES
-from ..coleta import cupom, fort
+from ..coleta import cupom, fort, fort_site
 from .banco import Conexao
 from .limite import LimiteDeTaxa
 from .produtos import _CONDICAO
@@ -157,18 +157,22 @@ class Ligacao(BaseModel):
 
 @router.post("/revisao/{item_id}/ligar")
 def ligar(item_id: UUID, ligacao: Ligacao, conn: Conexao):
-    """Item do encarte -> produto(s) do catálogo: publica o preço e lembra o nome para os próximos encartes."""
+    """Item do encarte ou produto do site do Fort -> produto(s) do catálogo: publica o preço e lembra a ligação."""
     with conn.transaction():
         item = conn.execute(
             "select tipo, proposta_agente as p from fila_revisao where id = %s and status = 'aberta' for update", (item_id,)
         ).fetchone()
-        if item is None or item["tipo"] != "encarte" or not item["p"]:
+        do_site = item is not None and item["tipo"] == "ean" and (item["p"] or {}).get("origem") == fort_site.ORIGEM
+        if item is None or (item["tipo"] != "encarte" and not do_site) or not item["p"]:
             raise HTTPException(404, "item de encarte aberto não encontrado")
         existentes = {
             str(r["id"]) for r in conn.execute("select id from produto where id = any(%s)", (ligacao.produto_ids,)).fetchall()
         }
         if len(existentes) != len(set(ligacao.produto_ids)):
             raise HTTPException(422, "produto não encontrado")
+        if do_site:
+            agora = datetime.now(UTC)
+            return {"precos": fort_site.ligar_sugestao(conn, str(item_id), item["p"], sorted(existentes), "painel", agora)}
         precos, valido_ate = fort.ligar_item(conn, str(item_id), item["p"], sorted(existentes), "painel", datetime.now(UTC))
     return {"precos": precos, "valido_ate": valido_ate}
 

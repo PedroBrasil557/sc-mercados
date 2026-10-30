@@ -35,7 +35,7 @@ SITES = {
     "sams": "www.samsclub.com.br",
 }
 # Redes com coleta própria fora da VTEX (o Vigia acompanha toda rede com site).
-SITES_POR_NOME = {"Rede Top": "www.redetoponline.com.br"}
+SITES_POR_NOME = {"Rede Top": "www.redetoponline.com.br", "Fort Atacadista": "www.fortatacadista.com.br"}
 
 # Nome no OpenStreetMap (minúsculas) -> rede. Lojas da Cooper fora do site entram na rede Cooper, sem preço on-line.
 # A loja recebe o nome "Rede Bairro", menos as que têm nome próprio (NOMES_PROPRIOS).

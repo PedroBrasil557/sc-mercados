@@ -37,9 +37,9 @@ AGENTES = [
     Agente(
         "coletor",
         "Coletor de preços",
-        "Busca o preço de cada produto do catálogo nos sites do Giassi, da Cooper, do Angeloni, do Sam's e da Rede Top, "
+        "Busca o preço de cada produto do catálogo nos sites do Giassi, da Cooper, do Angeloni, do Sam's, da Rede Top e do Fort, "
         "loja por loja.",
-        "Todo dia às 5h (Rede Top às 6h) e quinta às 15h",
+        "Todo dia às 5h (Rede Top às 6h, site do Fort às 7h) e quinta às 15h",
         "Roda e publica sozinho. Preço estranho ou embalagem diferente vai para o Revisor.",
         timedelta(hours=26),
     ),

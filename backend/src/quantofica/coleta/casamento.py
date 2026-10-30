@@ -94,3 +94,80 @@ def casar(nome_encarte: str, candidatos: list[Candidato]) -> list[Candidato]:
     melhor = max(a for a, _ in aceitos)
     empatados = [c for a, c in aceitos if a == melhor]
     return empatados if len(empatados) == 1 else []
+
+
+# ---------- nome de site (sem código de barras) ----------
+# O site do Fort escreve "Refrigerante Fanta Laranja Pet 600ml"; o catálogo, "Refrigerante Laranja Fanta Garrafa
+# 600ml". Para ligar sem código de barras e sem misturar produtos (embalagem, sabor ou linha diferente), a
+# regra é estrita: mesma marca, mesmo tamanho, e as únicas palavras que podem faltar de um lado são as neutras
+# (embalagem, "pet", "puro malte", "uht"...). Sabor, cor, número ("intensidade 6"), "sem X"/"com X" e refil contam.
+# A lista saiu dos pares que o casador de encarte liga com segurança (análise de 30/10/2026, site do Fort).
+NEUTRAS = set(
+    """litro litros l ml g kg pet tamanho unidades unidade un und pacote pct pague leve mais menos lata sache saches pote
+    bandeja frasco vidro squeeze pouch tetra pak tp embalagem economica economico envoltorio caixa cx garrafa copo gratis
+    pump tampa bisnaga aerossol congelado congelada iqf nacional sabor tipo uht puro malte torrado moido liofilizado
+    descartavel uso geral ao familia conserva fermentada gaseificada alcoolica recheado recheio roupa roupas massa long neck
+    lv pg emb refrigerado resfriado pronto consumo""".split()
+)
+_UNIDADES_DE_TAMANHO = {"litro", "litros", "l", "kg", "g", "ml", "gramas"}
+_CONTAGEM = {"unidades", "un", "rolos", "saches", "pacotes"}
+
+
+def tracos(nome: str, marca: str | None) -> set[str]:
+    """O que distingue o produto: palavras do nome sem a marca nem o tamanho, "sem X"/"com X" e números soltos."""
+    da_marca = set(palavras(marca or ""))
+    ws = palavras(nome)
+    saida: set[str] = set()
+    for i, w in enumerate(ws):
+        prox = ws[i + 1] if i + 1 < len(ws) else ""
+        if w in ("sem", "com") and prox and prox not in NEUTRAS and not prox[0].isdigit():
+            saida.add(f"{w}_{prox}")
+            continue
+        if w in PARE or w in da_marca:
+            continue
+        if re.fullmatch(r"\d+", w):
+            if prox in _CONTAGEM:
+                saida.add(f"{w}un")  # "com 15 unidades" não é o pacote com 10
+            elif prox not in _UNIDADES_DE_TAMANHO:
+                saida.add(f"n{w}")  # "intensidade 6" não é a 7
+            continue
+        if w[0].isdigit():
+            continue  # o tamanho (500ml, 1,5) já é conferido à parte
+        saida.add(w)
+    return saida
+
+
+def _kit(nome: str, unidade: str) -> bool:
+    """Dois tamanhos diferentes na mesma unidade: kit ("200ml + 120ml grátis"), não o produto avulso."""
+    return len({t.quantidade for t in tam.todos(nome) if t.unidade == unidade}) > 1
+
+
+def casar_estrito(nome: str, marca: str | None, candidatos: list[Candidato]) -> list[Candidato]:
+    """Produtos do catálogo que são, com certeza, o produto do site. Vazio se nenhum ou se mais de um diferente."""
+    t = tam.extrair(nome)
+    if t is None or tam.embalagem_multipla(nome) or _kit(nome, t.unidade):
+        return []
+    f = tracos(nome, marca)
+    tipo = (palavras(nome) or [""])[0]
+    aceitos = []
+    for c in candidatos:
+        if c.tamanho is None or not c.tamanho.mesmo_que(t, 0.005) or not c.marca:
+            continue
+        if tam.embalagem_multipla(c.nome) or _kit(c.nome, t.unidade):
+            continue
+        if _simples_marca(c.marca) != _simples_marca(marca or ""):
+            continue
+        nome_c = palavras(c.nome)
+        if not nome_c or (nome_c[0] not in palavras(nome) and tipo not in nome_c):
+            continue
+        fc = tracos(c.nome, c.marca)
+        if DIFERENCIAIS & fc != DIFERENCIAIS & f:
+            continue
+        if (f - fc) <= NEUTRAS and (fc - f) <= NEUTRAS and (f & fc) - NEUTRAS:
+            aceitos.append(c)
+    # Dois produtos do catálogo que só diferem em palavras neutras são o mesmo (cadastro duplicado): leva os dois.
+    return aceitos if len({frozenset(tracos(c.nome, c.marca) - NEUTRAS) for c in aceitos}) == 1 else []
+
+
+def _simples_marca(marca: str) -> str:
+    return " ".join(palavras(marca))

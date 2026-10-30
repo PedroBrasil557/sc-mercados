@@ -296,7 +296,7 @@ def test_cupom_calcula_a_economia_so_com_os_itens_reconhecidos(api, banco_url, c
     cupom = {
         "chave": "4226 1012 3456 7800 0199 6500 1000 0012 3410 0012 3456",
         "emitente": "Mercado Exemplo",
-        "emitido_em": AGORA.date().isoformat(),
+        "emitido_em": (AGORA - timedelta(hours=3)).date().isoformat(),  # data do cupom: a de Blumenau
         "total_centavos": 4290,
         "itens": [
             {"descricao": "ARROZ KIARROZ T1 5KG", "codigo": "7896084700119", "quantidade": 1, "valor_total_centavos": 2290},
