@@ -254,6 +254,21 @@ export default function Adicionar() {
                 : item.preco_centavos && !item.no_seu_mercado
                   ? "Não tem no seu mercado"
                   : null;
+            if (item.por_kg) {
+              // Item por quilo (fase 1): mostra o preço do quilo; pôr na lista vem na fase 2.
+              return (
+                <LinhaDeResultado
+                  nome={item.nome_curto}
+                  detalhe="Qualquer marca · preço do quilo"
+                  nota={nota}
+                  notaDestaque={!!item.desconto_pct}
+                  preco={item.preco_centavos}
+                  porKg
+                  onde={item.no_seu_mercado ? "no seu mercado" : item.onde ? `${item.onde.rede} · ${km(item.onde.distancia_km)}` : null}
+                  produto={produtoDe(item)}
+                />
+              );
+            }
             return (
               <LinhaDeResultado
                 nome={item.nome_curto}
@@ -347,17 +362,23 @@ function LinhaDeResultado(p: {
   preco?: number | null;
   onde?: string | null;
   produto: Produto;
-  aoPor: () => void;
+  porKg?: boolean;
+  aoPor?: () => void;
 }) {
   const { cor } = useTema();
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${p.nome}, ${p.detalhe}${p.preco ? `, ${reais(p.preco)} ${p.onde ?? ""}` : ""}. Ver detalhes`}
+      accessibilityLabel={`${p.nome}, ${p.detalhe}${p.preco ? `, ${reais(p.preco)}${p.porKg ? " o quilo" : ""} ${p.onde ?? ""}` : ""}. Ver detalhes`}
       onPress={() => router.push({ pathname: "/produto/[id]", params: { id: p.produto.id } })}
       style={[estilos.resultado, { borderColor: cor.bordaPadrao }]}
     >
-      <Miniatura produtoId={p.produto.id} categoria={p.produto.categoria} tamanho={tamanho(p.produto.tamanho, p.produto.unidade)} nome={p.nome} />
+      <Miniatura
+        produtoId={p.produto.id}
+        categoria={p.produto.categoria}
+        tamanho={p.porKg ? "kg" : tamanho(p.produto.tamanho, p.produto.unidade)}
+        nome={p.nome}
+      />
       <View style={{ flex: 1, gap: 2 }}>
         <Text numberOfLines={2} style={[fonte("corpoForte"), { color: cor.textoPrincipal }]}>
           {p.nome}
@@ -375,11 +396,14 @@ function LinhaDeResultado(p: {
       </View>
       {p.preco ? (
         <View style={{ alignItems: "flex-end" }}>
-          <Text style={[fonte("precoMedio"), { color: cor.textoPrincipal }]}>{reais(p.preco)}</Text>
+          <Text style={[fonte("precoMedio"), { color: cor.textoPrincipal }]}>
+            {reais(p.preco)}
+            {p.porKg ? <Text style={[fonte("legenda"), { color: cor.textoSuave }]}>/kg</Text> : null}
+          </Text>
           {p.onde ? <Text style={[fonte("legenda"), { color: cor.textoSuave }]}>{p.onde}</Text> : null}
         </View>
       ) : null}
-      <BotaoMais rotulo={`Pôr ${p.nome} na lista`} aoTocar={p.aoPor} />
+      {p.aoPor ? <BotaoMais rotulo={`Pôr ${p.nome} na lista`} aoTocar={p.aoPor} /> : null}
     </Pressable>
   );
 }

@@ -214,11 +214,15 @@ def busca(
                 "marca": p["marca"],
                 "tamanho": p["tamanho"],
                 "unidade": p["unidade"],
-                "tamanho_texto": tamanho_texto(p["tamanho"], p["unidade"]),
+                # Item por quilo: o preço já é o do quilo ("R$ 16,90/kg" no app).
+                "tamanho_texto": "por kg" if p.get("por_kg") else tamanho_texto(p["tamanho"], p["unidade"]),
                 "categoria": p["categoria"],
                 "grupo": p["grupo"],
+                "por_kg": bool(p.get("por_kg")),
                 "preco_centavos": o.preco_centavos if o else None,
-                "preco_por_unidade": preco_por_unidade(o.preco_centavos, p["tamanho"], p["unidade"]) if o else None,
+                "preco_por_unidade": (
+                    preco_por_unidade(o.preco_centavos, p["tamanho"], p["unidade"]) if o and not p.get("por_kg") else None
+                ),
                 "desconto_pct": desconto,
                 "no_seu_mercado": no_seu is not None,
                 "onde": loja_publica(loja_principal),

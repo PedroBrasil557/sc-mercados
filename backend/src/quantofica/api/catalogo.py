@@ -18,9 +18,13 @@ def catalogo(conn: Connection) -> dict:
         return guardado[1]
     produtos = {}
     grupos: dict[str, list[str]] = {}
-    for r in conn.execute("select id, nome_humano, marca, tamanho, unidade, categoria_id from produto").fetchall():
+    for r in conn.execute(
+        """select id, nome_humano, marca, tamanho, unidade, categoria_id,
+                  coalesce((atributos->>'por_kg')::boolean, false) as por_kg from produto"""
+    ).fetchall():
         pid = str(r["id"])
-        g = regra_nome.grupo(r["nome_humano"], r["marca"], r["tamanho"], r["unidade"])
+        # Item por quilo já é "qualquer marca" (regras/por_peso.py): não entra em grupo com os embalados de 1 kg.
+        g = None if r["por_kg"] else regra_nome.grupo(r["nome_humano"], r["marca"], r["tamanho"], r["unidade"])
         produtos[pid] = {
             "id": pid,
             "nome": r["nome_humano"],
@@ -30,6 +34,7 @@ def catalogo(conn: Connection) -> dict:
             "unidade": r["unidade"],
             "categoria": r["categoria_id"],
             "grupo": g,
+            "por_kg": r["por_kg"],
         }
         if g:
             grupos.setdefault(g, []).append(pid)

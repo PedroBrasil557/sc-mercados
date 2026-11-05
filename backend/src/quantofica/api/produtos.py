@@ -37,7 +37,8 @@ def buscar(
     onde = ("where " + " and ".join([_CONDICAO] * len(palavras))) if palavras else ""
     parametros = [termo for p in palavras for termo in (f"%{p}%", f"%{p}%")]
     produtos = conn.execute(
-        f"""select p.id, p.nome_humano as nome, p.marca, p.tamanho, p.unidade, p.categoria_id as categoria
+        f"""select p.id, p.nome_humano as nome, p.marca, p.tamanho, p.unidade, p.categoria_id as categoria,
+                   coalesce((p.atributos->>'por_kg')::boolean, false) as por_kg
             from produto p {onde} order by p.categoria_id, p.nome_humano limit %s""",
         (*parametros, limite),
     ).fetchall()
