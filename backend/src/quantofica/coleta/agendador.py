@@ -6,7 +6,8 @@ Agenda (.github/workflows/coleta.yml): todo dia às 5h e quinta à tarde, quando
 Regras do que vira preço publicado:
 - só o preço simulado na loja física (o de catálogo é regional, não é o da prateleira daquela loja);
 - embalagem múltipla com o EAN da unidade vai para revisão (R1);
-- preço mais de 50% longe da mediana dos últimos 30 dias vai para revisão em vez de aparecer;
+- preço que mudou mais de 50% em relação ao da própria loja vai para revisão; a coleta seguinte vendo o mesmo
+  preço confirma e publica (diferença entre redes é normal e não trava nada);
 - loja (seller) que a rede devolve mas não está cadastrada vai para revisão.
 """
 
@@ -28,8 +29,6 @@ from . import gravar
 from . import redes as config
 from .gravar import Preco
 from .vtex import ClienteHttp, Http, PrecoColetado, Rede, coletar
-
-JANELA_HISTORICO = timedelta(days=30)
 
 
 @dataclass(frozen=True)
@@ -54,13 +53,15 @@ class Plano:
     revisar: list[Revisao] = field(default_factory=list)
     skus: dict[str, tuple[str, str]] = field(default_factory=dict)  # produto -> (sku, nome no site)
     so_catalogo: int = 0
+    confirmados: list[str] = field(default_factory=list)  # alertas de preço que esta coleta confirmou
 
 
 def planejar(
     coletados: Iterable[PrecoColetado],
     loja_por_seller: dict[str, str],
     produto_por_ean: dict[str, str],
-    historico: dict[str, list[int]],
+    anteriores: dict[tuple[str, str], int],
+    pendentes: dict[str, int] | None = None,
 ) -> Plano:
     """Decide o que vira observação e o que vai para revisão. Não toca no banco."""
     plano = Plano()
@@ -90,11 +91,14 @@ def planejar(
             revisar_uma_vez(Revisao("anomalia", Anomalia(f"seller:{c.rede}:{c.seller}", f"loja não cadastrada: {c.loja}")))
             continue
         evidencia = f"vtex:{c.rede}:{c.seller}:{c.sku}"
-        if monitor.preco_fora_da_curva(c.preco_centavos, historico.get(produto, [])):
+        referencia = f"preco:{loja}:{produto}"
+        if (pendentes or {}).get(referencia) == c.preco_centavos:
+            plano.confirmados.append(referencia)  # o mesmo preço de novo: não é erro do site
+        elif monitor.preco_mudou_demais(c.preco_centavos, anteriores.get((loja, produto))):
             plano.revisar.append(
                 Revisao(
                     "anomalia",
-                    Anomalia(f"preco:{loja}:{produto}", "preço mais de 50% longe da mediana de 30 dias"),
+                    Anomalia(referencia, "preço mudou mais de 50% em relação ao da própria loja"),
                     {"preco_centavos": c.preco_centavos, "preco_de_centavos": c.preco_de_centavos, "evidencia": evidencia},
                 )
             )
@@ -125,15 +129,9 @@ def _rodar_rede(conn: psycopg.Connection, http: Http, rede: Rede, agora: datetim
                 "select id, seller_id from loja where rede_id = %s and seller_id is not null", (rede_id,)
             ).fetchall()
         }
-        # Referência para "preço fora da curva": o preço atual do produto nas outras lojas e as mudanças recentes.
-        historico: dict[str, list[int]] = {}
-        for r in conn.execute(
-            """select produto_id, preco_centavos from preco_atual where faixa = %s and observado_em >= %s
-               union all
-               select produto_id, preco_centavos from observacao_preco where faixa = %s and observado_em >= %s""",
-            (faixa, agora - JANELA_HISTORICO, faixa, agora - JANELA_HISTORICO),
-        ).fetchall():
-            historico.setdefault(str(r["produto_id"]), []).append(r["preco_centavos"])
+        # Referência para a trava: o preço da própria loja (e os alertas que esperam a confirmação da coleta).
+        anteriores = monitor.precos_anteriores(conn, list(loja_por_seller.values()), faixa)
+        pendentes = monitor.precos_pendentes(conn)
 
         # Cache: o SKU de cada produto nesta rede e o que a rede não vende. O Catalogador refaz os dois toda semana;
         # a janela de 10 dias cobre um atraso dele sem a coleta sair procurando milhares de produtos um a um.
@@ -153,7 +151,7 @@ def _rodar_rede(conn: psycopg.Connection, http: Http, rede: Rede, agora: datetim
         }
         nao_encontrados: list[str] = []
         coletados = coletar(http, rede, [e for e in produto_por_ean if e not in ausentes], conhecidos, nao_encontrados)
-        plano = planejar(coletados, loja_por_seller, produto_por_ean, historico)
+        plano = planejar(coletados, loja_por_seller, produto_por_ean, anteriores, pendentes)
 
         with conn.transaction():
             for produto, (sku, nome_site) in plano.skus.items():
@@ -178,6 +176,7 @@ def _rodar_rede(conn: psycopg.Connection, http: Http, rede: Rede, agora: datetim
                     (rede_id, codigo, agora),
                 )
             abertas = sum(monitor.abrir_revisao(conn, r.tipo, r.anomalia, r.proposta) for r in plano.revisar)
+            monitor.confirmar_precos(conn, plano.confirmados, "coletor")
             conn.execute(
                 """update execucao_coleta set terminada_em = now(), status = 'ok', eans_pedidos = %s, precos_gravados = %s,
                    enviados_revisao = %s where id = %s""",

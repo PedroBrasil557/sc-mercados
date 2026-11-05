@@ -1,0 +1,15 @@
+name: Acordar a API
+
+# Reserva do agendamento no Supabase (db/supabase/acordar_api.sql): o plano grátis do Render dorme depois de
+# 15 minutos sem acesso. O GitHub pode atrasar agendamentos; por isso o principal fica no banco.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  acordar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - run: curl -fsS -m 90 -o /dev/null -w "%{http_code} em %{time_total}s\n" https://sc-mercados-api.onrender.com/v1/saude

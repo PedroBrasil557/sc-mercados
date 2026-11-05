@@ -44,7 +44,7 @@ import uuid
 from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 
 import psycopg
@@ -70,7 +70,6 @@ CHAVE_VISITANTE = "df072f85df9bf7dd71b6811c34bdbaa4f219d98775b56cff9dfa5f8ca1bf8
 REDE = "Rede Top"
 CIDADE = "Blumenau"
 ESPACO = uuid.UUID("0c6a3f7e-2b1d-4e8a-9f55-31d2c4b7a901")  # o mesmo dos scripts de catálogo: mesmo EAN, mesmo produto
-JANELA_HISTORICO = timedelta(days=30)
 # Cada EAN novo no catálogo vira busca diária nas quatro redes VTEX: o catálogo cresce aos poucos, pelos mais vendidos.
 LIMITE_NOVOS_POR_RODADA = 100
 LIMITE_PAGINAS = 500  # por departamento; trava de segurança contra paginação que não acaba
@@ -309,14 +308,10 @@ def _coletar(conn, http, agora: datetime, rede_id) -> dict:
         for r in conn.execute("select codigo, produto_id from ean where status = 'ok'").fetchall()
     }
     todos_eans = {r["codigo"] for r in conn.execute("select codigo from ean").fetchall()}
-    historico: dict[str, list[int]] = {}
-    for r in conn.execute(
-        """select produto_id, preco_centavos from preco_atual where faixa = 'varejo' and observado_em >= %s
-           union all
-           select produto_id, preco_centavos from observacao_preco where faixa = 'varejo' and observado_em >= %s""",
-        (agora - JANELA_HISTORICO, agora - JANELA_HISTORICO),
-    ).fetchall():
-        historico.setdefault(str(r["produto_id"]), []).append(r["preco_centavos"])
+    # Trava: o preço da própria loja (diferença entre redes é normal); a coleta seguinte com o mesmo preço confirma.
+    anteriores = monitor.precos_anteriores(conn, list(por_loja), "varejo")
+    pendentes = monitor.precos_pendentes(conn)
+    confirmados: list[str] = []
 
     with conn.transaction():
         novos: dict[str, ItemDoSite] = {}
@@ -348,7 +343,10 @@ def _coletar(conn, http, agora: datetime, rede_id) -> dict:
                     continue
                 no_site.setdefault(produto, item)
                 evidencia = f"vipcommerce:redetop:{item.id_no_site}"
-                if monitor.preco_fora_da_curva(item.preco_centavos, historico.get(produto, [])):
+                referencia = f"preco:{loja}:{produto}"
+                if pendentes.get(referencia) == item.preco_centavos:
+                    confirmados.append(referencia)
+                elif monitor.preco_mudou_demais(item.preco_centavos, anteriores.get((loja, produto))):
                     proposta = {
                         "preco_centavos": item.preco_centavos,
                         "preco_de_centavos": item.preco_de_centavos,
@@ -357,7 +355,7 @@ def _coletar(conn, http, agora: datetime, rede_id) -> dict:
                     revisar.append(
                         (
                             "anomalia",
-                            Anomalia(f"preco:{loja}:{produto}", "preço mais de 50% longe da mediana de 30 dias"),
+                            Anomalia(referencia, "preço mudou mais de 50% em relação ao da própria loja"),
                             proposta,
                         )
                     )
@@ -368,6 +366,7 @@ def _coletar(conn, http, agora: datetime, rede_id) -> dict:
                 resumo["precos"] += 1
         # Só o que mudou vai para o histórico; o resto só é confirmado no preço atual.
         resumo["mudaram"] = gravar.registrar(conn, linhas, agora)["mudaram"]
+        monitor.confirmar_precos(conn, confirmados, "coletor")
         for produto, item in no_site.items():  # nome no site: o Vigia compara o tamanho entre redes (R1)
             conn.execute(
                 """insert into produto_na_rede (produto_id, rede_id, sku, nome_no_site) values (%s, %s, %s, %s)

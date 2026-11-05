@@ -133,3 +133,51 @@ def test_rodada_age_so_com_certeza_registra_tudo_e_nao_repete(banco):
     # No dia seguinte, a mesma conclusão sobre a sardinha não vira um registro novo
     assert revisor.rodar(banco, None, agora + timedelta(days=1), buscar_nos_sites=False)["sem_mudanca"] == 1
     assert banco.execute("select count(*) as n from execucao_agente").fetchone()["n"] == 3
+
+
+# ---------- regras de 04/11/2026: famílias do catálogo, trava do Fort, preço da própria loja ----------
+
+
+def _familias():
+    from quantofica.coleta.casamento import Candidato, Familias
+    from quantofica.regras.tamanho import Tamanho
+
+    return Familias([
+        Candidato("clube-orig", "Biscoito Salgado Club Social Original Multipack 144g", "Club Social", Tamanho(144, "g")),
+        Candidato("clube-pizza", "Biscoito Salgado Club Social Pizza Multipack 144g", "Club Social", Tamanho(144, "g")),
+        Candidato("hothit", "Sanduíche Hot Hit Cheddar e Bacon Congelado Seara Pacote 145g", "Seara", Tamanho(145, "g")),
+        Candidato("picanha", "Sanduíche Picanha Seara Gourmet 145g", "Seara", Tamanho(145, "g")),
+    ])  # fmt: skip
+
+
+def test_sugestao_do_fort_liga_so_com_familia_e_preco_coerentes():
+    from quantofica.agentes.revisor import decidir_site_sem_ean
+
+    f = _familias()
+    proposta = {"nome": "Biscoito Salgado Club Social Original 144g", "marca": "Club Social", "preco_centavos": 790,
+                "produtos": ["clube-orig"]}  # fmt: skip
+    assert decidir_site_sem_ean(proposta, f, 800).acao == "ligar"
+    assert decidir_site_sem_ean(proposta, f, 1600).acao == "sugerir"  # preço metade dos outros: confira a embalagem
+    assert decidir_site_sem_ean(proposta, f, None).acao == "sugerir"  # sem preço para comparar
+    # "Picanha" separa variantes em outra família: o Fort disse outro sabor que o do produto sugerido.
+    hot = {"nome": "Sanduíche Congelado Seara Hot Hit Picanha 145g", "marca": "Seara", "preco_centavos": 900,
+           "produtos": ["hothit"]}  # fmt: skip
+    d = decidir_site_sem_ean(hot, f, 950)
+    assert d.acao == "sugerir" and "picanha" in d.motivo
+
+
+def test_trava_do_fort_confirma_atacarejo_mais_barato_e_deixa_o_mais_caro():
+    from quantofica.agentes.revisor import decidir_trava_do_fort
+
+    assert decidir_trava_do_fort({"preco_centavos": 299, "mediana_centavos": 560}, None).acao == "confirmar"
+    assert decidir_trava_do_fort({"preco_centavos": 1990}, 1000).acao == "humano"
+    assert decidir_trava_do_fort({"preco_centavos": 100}, 1000).acao == "humano"  # 10x mais barato: outra embalagem?
+    assert decidir_trava_do_fort({"preco_centavos": 500}, None).acao == "resolver"
+
+
+def test_preco_que_mudou_na_loja_espera_a_coleta_seguinte():
+    from quantofica.agentes.revisor import decidir_preco_da_loja
+
+    agora = datetime(2026, 11, 5, 12, tzinfo=UTC)
+    assert decidir_preco_da_loja({"criada_em": agora - timedelta(days=1)}, agora).acao == "aguardar"
+    assert decidir_preco_da_loja({"criada_em": agora - timedelta(days=4)}, agora).acao == "descartar"

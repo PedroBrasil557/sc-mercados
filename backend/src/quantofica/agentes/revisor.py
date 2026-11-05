@@ -20,7 +20,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from ..coleta import cupom, fort, fort_site
-from ..coleta.casamento import PARE, VARIOS, Candidato, casar, palavras
+from ..coleta.casamento import PARE, VARIOS, Candidato, Familias, casar, palavras
 from ..coleta.vtex import ClienteHttp
 from ..regras import tamanho as tam
 from . import rodada
@@ -204,11 +204,93 @@ def decidir_embalagem(motivo: str) -> Decisao:
     )
 
 
-def decidir_site_sem_ean(proposta: dict) -> Decisao:
-    """Produto do site do Fort que o casador de encarte liga, mas o estrito não: nunca liga sozinho (R1)."""
-    return Decisao("sugerir", 0.7, "O site do Fort não mostra código de barras e o nome não bate palavra por palavra com "
-                   "o do catálogo. Confira se é o mesmo produto (sabor, linha, embalagem) antes de aceitar.",
-                   produtos=list(proposta.get("produtos") or []), conferido=["nome", "marca", "tamanho"])  # fmt: skip
+PRECO_COERENTE = (0.65, 1.25)  # preço do site / mediana dos outros mercados: fora disso, outra embalagem ou produto
+
+
+def decidir_site_sem_ean(proposta: dict, familias: Familias | None = None, mediana: int | None = None) -> Decisao:
+    """Produto do site do Fort que o casador estrito não ligou. O Revisor liga sozinho só com duas evidências
+    independentes: a análise da família (nenhuma palavra diferente separa variantes no catálogo) e o preço coerente
+    com o dos outros mercados. Sem as duas, fica para uma pessoa (R1: na dúvida, não mistura)."""
+    produtos = list(proposta.get("produtos") or [])
+    conferido = ["nome", "marca", "tamanho", "família no catálogo", "preço nos outros mercados"]
+    if familias is not None and produtos:
+        igual, impedem = familias.mesma_variante(proposta["nome"], proposta.get("marca"), produtos[0])
+        razao = proposta["preco_centavos"] / mediana if mediana else None
+        if igual and razao is not None and PRECO_COERENTE[0] <= razao <= PRECO_COERENTE[1]:
+            return Decisao("ligar", 0.9, "Mesma marca e tamanho; as palavras diferentes nos nomes não separam variantes em "
+                           f"nenhuma família do catálogo, e o preço está coerente ({razao:.2f}x a mediana dos outros "
+                           "mercados).", produtos=produtos, conferido=conferido)  # fmt: skip
+        if impedem:
+            return Decisao("sugerir", 0.7, f"Confira: {', '.join(impedem)} pode indicar outra variante (sabor, linha ou "
+                           "embalagem).", produtos=produtos, conferido=conferido)  # fmt: skip
+        if razao is not None:
+            return Decisao("sugerir", 0.7, f"Os nomes batem, mas o preço é {razao:.2f}x a mediana dos outros mercados: "
+                           "confira a embalagem.", produtos=produtos, conferido=conferido)  # fmt: skip
+    return Decisao("sugerir", 0.7, "O site do Fort não mostra código de barras e nenhum outro mercado tem preço deste "
+                   "produto para comparar. Confira se é o mesmo produto antes de aceitar.",
+                   produtos=produtos, conferido=conferido)  # fmt: skip
+
+
+def decidir_trava_do_fort(proposta: dict, mediana: int | None) -> Decisao:
+    """Preço do site do Fort barrado pela trava (ligação estrita, preço longe dos outros mercados)."""
+    conferido = ["ligação estrita pelo nome", "preço nos outros mercados"]
+    mediana = proposta.get("mediana_centavos") or mediana
+    if not mediana:
+        return Decisao("resolver", 0.92, "Nenhum outro mercado tem preço deste produto agora: a trava não se aplica mais.",
+                       conferido=conferido)  # fmt: skip
+    razao = proposta["preco_centavos"] / mediana
+    if 0.45 <= razao < 1:
+        return Decisao("confirmar", 0.9, "Ligação estrita (mesma marca, tamanho e variante) e o Fort mais barato "
+                       f"({razao:.2f}x a mediana), o que é normal em atacarejo: confirmei a ligação e publiquei.",
+                       conferido=conferido)  # fmt: skip
+    return Decisao("humano", 0.5, f"O preço do Fort é {razao:.2f}x a mediana dos outros mercados. Se a ligação estiver "
+                   "certa, confirme; se não, descarte.", conferido=conferido)  # fmt: skip
+
+
+def decidir_preco_da_loja(item: dict, agora: datetime) -> Decisao:
+    """Preço que mudou mais de 50% na própria loja: a próxima coleta confirma (mesmo preço) ou ele some."""
+    if agora - item["criada_em"] > timedelta(days=3):
+        return Decisao("descartar", 0.92, "O preço não se repetiu nas coletas seguintes: era erro passageiro do site e não "
+                       "foi publicado.", conferido=["coletas seguintes"])  # fmt: skip
+    return Decisao("aguardar", 0.6, "Se a próxima coleta vir o mesmo preço, ele é publicado sozinho; se não, este alerta "
+                   "é descartado.", conferido=["coletas seguintes"])  # fmt: skip
+
+
+def outras_embalagens(conn, referencia: str) -> tuple[list[dict], bool]:
+    """Redes cujo site mostra outra embalagem para o código de barras do produto, e se todas discordam do cadastro."""
+    codigo = referencia.removeprefix("ean:")
+    p = conn.execute(
+        "select p.id, p.tamanho, p.unidade from ean e join produto p on p.id = e.produto_id where e.codigo = %s", (codigo,)
+    ).fetchone()
+    if p is None or p["tamanho"] is None:
+        return [], True
+    linhas = conn.execute(
+        """select pr.rede_id, r.nome as rede, pr.sku, pr.nome_no_site from produto_na_rede pr join rede r on r.id = pr.rede_id
+           where pr.produto_id = %s""",
+        (p["id"],),
+    ).fetchall()
+    erradas = [
+        {**dict(x), "produto_id": p["id"], "codigo": codigo}
+        for x in linhas
+        if x["nome_no_site"] and not tam.mesmo_tamanho_no_site(x["nome_no_site"], p["tamanho"], p["unidade"])
+    ]
+    # Todas as redes discordam do cadastro: quem está errado é o tamanho do produto, não as redes.
+    return erradas, len(erradas) == len(linhas) and len(linhas) > 1
+
+
+def desligar(conn, erradas: list[dict], agora: datetime) -> None:
+    """Desliga a rede do produto (outra embalagem): sai o SKU, sai o preço atual e o código vira "não vende" lá."""
+    for x in erradas:
+        conn.execute("delete from produto_na_rede where rede_id = %s and sku = %s", (x["rede_id"], x["sku"]))
+        conn.execute(
+            "delete from preco_atual where produto_id = %s and loja_id in (select id from loja where rede_id = %s)",
+            (x["produto_id"], x["rede_id"]),
+        )
+        conn.execute(
+            """insert into ean_ausente (rede_id, codigo, verificado_em) values (%s, %s, %s)
+               on conflict (rede_id, codigo) do update set verificado_em = excluded.verificado_em""",
+            (x["rede_id"], x["codigo"], agora),
+        )
 
 
 def decidir_cupom(proposta: dict, rede: str | None, lojas: list[dict]) -> Decisao:
@@ -249,6 +331,15 @@ def _rodar(conn, http, agora, buscar_nos_sites, resumo) -> None:
     ).fetchall()
     for c in ("analisados", "resolvidos_sozinho", "sugestoes", "para_voce", "sem_mudanca"):
         resumo[c] = 0
+    familias = Familias(catalogo.candidatos)
+    produtos_do_fort = {
+        p
+        for i in itens
+        if (i["proposta"] or {}).get("origem") == fort_site.ORIGEM
+        for p in ((i["proposta"] or {}).get("produtos") or [i["referencia_id"].rsplit(":", 1)[-1]])
+    }
+    medianas = fort_site.medianas_nos_outros(conn, rede_fort["id"], sorted(produtos_do_fort), agora) if rede_fort else {}
+    erradas: list[dict] = []
 
     for item in itens:
         resumo["analisados"] += 1
@@ -265,11 +356,30 @@ def _rodar(conn, http, agora, buscar_nos_sites, resumo) -> None:
 
             d = decidir_encarte(item["proposta"], hoje, valido, catalogo.candidatos, procurar)
         elif tipo == "ean" and (item["proposta"] or {}).get("origem") == fort_site.ORIGEM:
-            d = decidir_site_sem_ean(item["proposta"])
+            sugerido = (item["proposta"].get("produtos") or [None])[0]
+            d = decidir_site_sem_ean(item["proposta"], familias, medianas.get(sugerido))
         elif tipo == "ean":
             d = decidir_embalagem(motivo)
         elif tipo == "anomalia" and motivo.startswith("tamanho diferente"):
-            d = decidir_tamanho_divergente(motivo)
+            erradas, cadastro_errado = outras_embalagens(conn, item["referencia_id"])
+            if erradas and not cadastro_errado:
+                redes = ", ".join(sorted({x["rede"] for x in erradas}))
+                d = Decisao("desligar", 0.93, f"O site de {redes} mostra outra embalagem com o mesmo código de barras: "
+                            "desliguei a rede deste produto (o preço dela não entra na comparação).",
+                            conferido=["nome no site de cada rede", "tamanho do produto"])  # fmt: skip
+            elif not erradas and not cadastro_errado:
+                d = Decisao("resolver", 0.92, "Os nomes em todas as redes ligadas batem com o tamanho do produto (o que "
+                            "divergia já foi desligado).", conferido=["nome no site de cada rede"])  # fmt: skip
+            else:
+                d = decidir_tamanho_divergente(motivo)
+        elif tipo == "anomalia" and (item["proposta"] or {}).get("origem") == fort_site.ORIGEM:
+            d = decidir_trava_do_fort(item["proposta"], medianas.get(item["referencia_id"].rsplit(":", 1)[-1]))
+        elif tipo == "anomalia" and motivo == "preço mais de 50% longe da mediana de 30 dias":
+            d = Decisao("resolver", 0.95, "Alerta da regra antiga, que comparava redes diferentes (diferença grande entre "
+                        "redes é normal). A coleta agora compara com o preço da própria loja e publica o preço.",
+                        conferido=["regra de 04/11/2026"])  # fmt: skip
+        elif tipo == "anomalia" and motivo.startswith("preço mudou mais de 50%"):
+            d = decidir_preco_da_loja(item, agora)
         elif tipo == "anomalia" and "mediana" in motivo:
             d = decidir_preco(item, _mediana(conn, item["referencia_id"], agora), agora)
         elif tipo == "anomalia" and motivo.startswith(("coletor parado", "cobertura caiu")):
@@ -287,7 +397,21 @@ def _rodar(conn, http, agora, buscar_nos_sites, resumo) -> None:
             )
             aplicada = True
         elif d.confianca >= CERTEZA and d.acao == "ligar" and d.produtos and item["proposta"]:
-            fort.ligar_item(conn, str(item["id"]), item["proposta"], d.produtos, "revisor", agora)
+            if item["proposta"].get("origem") == fort_site.ORIGEM:
+                fort_site.ligar_sugestao(conn, str(item["id"]), item["proposta"], d.produtos, "revisor", agora, confirmar=False)
+            else:
+                fort.ligar_item(conn, str(item["id"]), item["proposta"], d.produtos, "revisor", agora)
+            aplicada = True
+        elif d.confianca >= CERTEZA and d.acao == "confirmar":
+            produto = item["referencia_id"].rsplit(":", 1)[-1]
+            fort_site.confirmar_ligacao(conn, str(item["id"]), item["proposta"], produto, "revisor", agora)
+            aplicada = True
+        elif d.confianca >= CERTEZA and d.acao == "desligar":
+            desligar(conn, erradas, agora)
+            conn.execute(
+                "update fila_revisao set status = 'resolvida', revisado_por = 'revisor', decidido_em = now() where id = %s",
+                (item["id"],),
+            )
             aplicada = True
 
         anterior = item["anterior"] or {}

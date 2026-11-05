@@ -149,8 +149,11 @@ def _rodar(conn, http, agora: datetime, rede_id) -> dict:
     resumo["no_site"] = len(no_site)
 
     ligados: dict[str, list[str]] = defaultdict(list)
-    for r in conn.execute("select sku, produto_id from produto_na_rede where rede_id = %s", (rede_id,)).fetchall():
+    confirmadas: set[tuple[str, str]] = set()  # (sku, produto) que o Revisor ou uma pessoa confirmou: sem trava
+    for r in conn.execute("select sku, produto_id, confirmada_em from produto_na_rede where rede_id = %s", (rede_id,)).fetchall():
         ligados[r["sku"]].append(str(r["produto_id"]))
+        if r["confirmada_em"]:
+            confirmadas.add((r["sku"], str(r["produto_id"])))
     grupos = _grupos(carregar_catalogo(conn))
     novos, sugestoes = [], []
     for sku, p in no_site.items():
@@ -168,7 +171,7 @@ def _rodar(conn, http, agora: datetime, rede_id) -> dict:
     linhas, travados = [], []
     for sku, p in no_site.items():
         for produto in ligados.get(sku, []):
-            if fora_da_trava(p["preco_centavos"], medianas.get(produto)):
+            if (sku, produto) not in confirmadas and fora_da_trava(p["preco_centavos"], medianas.get(produto)):
                 travados.append((sku, produto, p))
                 continue
             linhas += [
@@ -201,7 +204,13 @@ def _rodar(conn, http, agora: datetime, rede_id) -> dict:
                     f"preço do site do Fort mais de 40% longe da mediana dos outros mercados ({p['nome']!r}): "
                     "confira se a ligação pelo nome está certa",
                 ),
-                {"preco_centavos": p["preco_centavos"], "evidencia": f"{ORIGEM}:{sku}", "sku": sku},
+                {
+                    "preco_centavos": p["preco_centavos"],
+                    "evidencia": f"{ORIGEM}:{sku}",
+                    "sku": sku,
+                    "origem": ORIGEM,
+                    "mediana_centavos": medianas.get(produto),
+                },
             )
     resumo["ligados_agora"] = len({sku for _, sku, _ in novos})
     resumo["ligados"] = sum(1 for sku in no_site if sku in ligados)
@@ -210,23 +219,44 @@ def _rodar(conn, http, agora: datetime, rede_id) -> dict:
     return dict(resumo)
 
 
-def ligar_sugestao(conn, item_id: str, proposta: dict, produtos_ids: list[str], quem: str, agora: datetime) -> int:
-    """Painel ou Revisor confirmou a ligação: lembra o SKU do Fort e publica o preço (com a trava). Resolve o item."""
+def ligar_sugestao(
+    conn, item_id: str, proposta: dict, produtos_ids: list[str], quem: str, agora: datetime, confirmar: bool = True
+) -> int:
+    """Lembra o SKU do Fort, publica o preço e resolve o item. Uma pessoa (painel) confirma a ligação: a trava contra os
+    outros mercados deixa de valer. O Revisor liga sem confirmar: a trava continua de olho nos preços seguintes."""
     rede_id = conn.execute("select id from rede where nome = %s", (REDE,)).fetchone()["id"]
     lojas = lojas_da_cidade(conn, rede_id)
-    medianas = medianas_nos_outros(conn, rede_id, produtos_ids, agora)
     linhas = []
     for produto in produtos_ids:
         conn.execute(
-            """insert into produto_na_rede (produto_id, rede_id, sku, nome_no_site) values (%s, %s, %s, %s)
-               on conflict (rede_id, sku) do update set produto_id = excluded.produto_id""",
-            (produto, rede_id, proposta["sku"], proposta["nome"]),
+            """insert into produto_na_rede (produto_id, rede_id, sku, nome_no_site, confirmada_em)
+               values (%s, %s, %s, %s, %s)
+               on conflict (rede_id, sku) do update
+               set produto_id = excluded.produto_id, confirmada_em = excluded.confirmada_em""",
+            (produto, rede_id, proposta["sku"], proposta["nome"], agora if confirmar else None),
         )
-        if not fora_da_trava(proposta["preco_centavos"], medianas.get(produto)):
-            linhas += [
-                Preco(produto, loja, proposta["preco_centavos"], "varejo", "site", None, None, f"{ORIGEM}:{proposta['sku']}")
-                for loja in lojas
-            ]
+        linhas += [
+            Preco(produto, loja, proposta["preco_centavos"], "varejo", "site", None, None, f"{ORIGEM}:{proposta['sku']}")
+            for loja in lojas
+        ]
+    gravar.registrar(conn, linhas, agora)
+    conn.execute(
+        "update fila_revisao set status = 'resolvida', revisado_por = %s, decidido_em = now() where id = %s", (quem, item_id)
+    )
+    return len(linhas)
+
+
+def confirmar_ligacao(conn, item_id: str, proposta: dict, produto: str, quem: str, agora: datetime) -> int:
+    """Alerta de preço do site do Fort: a ligação está certa. Marca como confirmada, publica e resolve o item."""
+    rede_id = conn.execute("select id from rede where nome = %s", (REDE,)).fetchone()["id"]
+    conn.execute(
+        "update produto_na_rede set confirmada_em = %s where rede_id = %s and sku = %s and produto_id = %s",
+        (agora, rede_id, proposta["sku"], produto),
+    )
+    linhas = [
+        Preco(produto, loja, proposta["preco_centavos"], "varejo", "site", None, None, f"{ORIGEM}:{proposta['sku']}")
+        for loja in lojas_da_cidade(conn, rede_id)
+    ]
     gravar.registrar(conn, linhas, agora)
     conn.execute(
         "update fila_revisao set status = 'resolvida', revisado_por = %s, decidido_em = now() where id = %s", (quem, item_id)
