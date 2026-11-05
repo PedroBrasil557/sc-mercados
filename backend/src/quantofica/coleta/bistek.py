@@ -8,8 +8,9 @@ SCMercadosColetor, 1 requisição por segundo. Conferido em 05/11/2026:
   normalizado do Apollo, com a busca ($ROOT_QUERY.productSearch(...): recordsFiltered, from, to), os produtos
   (Product:sp-<id>: productName, brand, categories), os SKUs (itemId, ean, measurementUnit, unitMultiplier, images)
   e a oferta de cada vendedor (commertialOffer: Price, ListPrice, AvailableQuantity);
-- departamento: 18 produtos por página; coleção: 10. A busca da VTEX não passa do item 2.500 de uma mesma
-  consulta: departamento maior (Mercearia tem 2.636) é lido em ordem alfabética e depois na inversa;
+- departamento: 18 produtos por página; coleção: 10. O site não serve a página 51 de uma lista (vem sem
+  produtos): cada ordem alcança 900 produtos no departamento. Lista maior é lida em ordem alfabética e depois na
+  inversa; maior que as duas juntas (Mercearia tem 2.636), é lida pelas subcategorias do sitemap de categorias;
 - um só vendedor ("1", Bistek Supermercados): o preço do site é o mesmo para todas as lojas. Como o site do Fort,
   vale para as duas lojas do Bistek em Blumenau. PriceValidUntil é sempre daqui a um ano: não é validade de oferta.
 
@@ -68,7 +69,7 @@ DOMINIO = "www.bistek.com.br"
 REDE = "Bistek"
 ORIGEM = "bistek-site"
 VENDEDOR = "1"  # Bistek Supermercados: o único vendedor do site
-LIMITE_CONSULTA = 2500  # a busca da VTEX não passa do item 2.500 de uma mesma consulta
+MAX_PAGINAS = 50  # o site não serve a página 51 de uma lista (conferido em 05/11/2026)
 TENTATIVAS = 3  # página que falha (site lento, erro 5xx) é pedida de novo antes de dar a lista por incompleta
 OFERTAS_FIXAS = ("ofertacos-da-quinzena-sc",)  # o encarte da quinzena de SC (nem sempre está na página inicial)
 DEPARTAMENTOS_FORA = re.compile(r"floricultura|jardim")  # além do FORA do Catalogador
@@ -232,7 +233,7 @@ def _ler(http, url: str) -> Pagina | None:
 
 
 def _paginas(http, caminho: str, ordem: str, v: Varredura, ate: int | None, limite_paginas: int | None) -> tuple[int, int] | None:
-    """Lê as páginas de uma ordem até o fim, até `ate` posições ou até o limite da consulta.
+    """Lê as páginas de uma ordem até o fim, até `ate` posições ou até a última página que o site serve.
     Devolve (total da busca, posições lidas) ou None se uma página falhou."""
     pagina = 1
     while True:
@@ -246,22 +247,44 @@ def _paginas(http, caminho: str, ordem: str, v: Varredura, ate: int | None, limi
         v.guardar(p.itens)
         lidas = pagina * p.tamanho
         alvo = min(p.total, ate + p.tamanho if ate is not None else p.total)  # uma página de folga na emenda
-        if p.produtos < p.tamanho or lidas >= alvo or lidas + p.tamanho > LIMITE_CONSULTA:
+        if p.produtos < p.tamanho or lidas >= alvo or pagina >= MAX_PAGINAS:
             return p.total, min(lidas, p.total)
         pagina += 1
 
 
-def ler_lista(http, caminho: str, v: Varredura, limite_paginas: int | None = None) -> None:
-    """Uma lista inteira (departamento ou coleção), página por página, em ordem alfabética. Passando de 2.500
-    produtos (o limite de uma consulta), o que faltou é lido na ordem inversa."""
+def ler_lista(http, caminho: str, v: Varredura, limite_paginas: int | None = None, avisar: bool = True) -> int | None:
+    """Uma lista inteira (departamento ou coleção), página por página, em ordem alfabética. Passando do que uma
+    ordem alcança (50 páginas), o que faltou é lido na ordem inversa. Devolve quantos produtos ficaram sem ler
+    (0: a lista inteira), ou None se uma página falhou."""
     v.listas.append(caminho)
     lido = _paginas(http, caminho, ORDEM, v, None, limite_paginas)
-    if lido is None or lido[0] <= lido[1]:
-        return
+    if lido is None:
+        return None
     total, posicoes = lido
-    if total > 2 * LIMITE_CONSULTA:
-        v.problemas.append(f"{caminho}: {total} produtos, mais que duas consultas leem")
-    _paginas(http, caminho, ORDEM_INVERSA, v, total - posicoes, limite_paginas)
+    if total <= posicoes:
+        return 0
+    inverso = _paginas(http, caminho, ORDEM_INVERSA, v, total - posicoes, limite_paginas)
+    if inverso is None:
+        return None
+    faltou = max(0, total - posicoes - inverso[1])
+    if faltou and avisar:
+        v.problemas.append(f"{caminho}: {faltou} de {total} produtos além do que as duas ordens alcançam")
+    return faltou
+
+
+def ler_por_partes(http, caminho: str, v: Varredura, categorias: list[str], limite_paginas: int | None = None) -> None:
+    """Lista que passa do que as duas ordens alcançam: lê cada subcategoria (do sitemap de categorias), descendo
+    mais um nível quando a subcategoria também é grande demais."""
+    faltou = ler_lista(http, caminho, v, limite_paginas, avisar=False)
+    if not faltou:
+        return
+    nivel = caminho.count("/") + 1
+    filhas = [c for c in categorias if c.startswith(caminho + "/") and c.count("/") == nivel]
+    if not filhas:
+        v.problemas.append(f"{caminho}: {faltou} produtos além do que as duas ordens alcançam, sem subcategorias")
+        return
+    for f in filhas:
+        ler_por_partes(http, f, v, categorias, limite_paginas)
 
 
 def _rotas(http, sitemap: str) -> list[str]:
@@ -288,10 +311,14 @@ def colecoes_de_oferta(http) -> list[str]:
 def varrer(http, modo: str, limite_paginas: int | None = None) -> Varredura:
     v = Varredura()
     listas = colecoes_de_oferta(http) if modo == "ofertas" else departamentos(http)
+    categorias = _rotas(http, "category-0.xml") if modo == "catalogo" else []
     if not listas:
         v.problemas.append("sitemap sem listas para ler")
     for caminho in listas:
-        ler_lista(http, caminho, v, limite_paginas)
+        if modo == "catalogo":
+            ler_por_partes(http, caminho, v, categorias, limite_paginas)
+        else:
+            ler_lista(http, caminho, v, limite_paginas)
         print(f"  bistek: {caminho}: {len(v.itens)} SKUs até aqui, {v.paginas} páginas", flush=True)
     return v
 

@@ -113,8 +113,8 @@ def test_le_os_produtos_do_estado_da_pagina():
 class SiteDoBistek:
     """As páginas da loja virtual, sem rede: departamentos e coleções em ordem de nome, N produtos por página."""
 
-    def __init__(self, listas, departamentos=(), rotas=(), links_inicio=(), tamanho=18):
-        self.listas, self.departamentos, self.rotas = listas, departamentos, rotas
+    def __init__(self, listas, departamentos=(), rotas=(), links_inicio=(), tamanho=18, categorias=()):
+        self.listas, self.departamentos, self.rotas, self.categorias = listas, departamentos, rotas, categorias
         self.links_inicio, self.tamanho = links_inicio, tamanho
         self.chamadas: list[str] = []
 
@@ -123,7 +123,7 @@ class SiteDoBistek:
         u = urlparse(url)
         caminho = u.path.strip("/")
         if caminho.startswith("sitemap/"):
-            rotas = self.departamentos if "department" in caminho else self.rotas
+            rotas = self.departamentos if "department" in caminho else self.categorias if "category" in caminho else self.rotas
             return "<urlset>" + "".join(f"<url><loc>https://www.bistek.com.br/{r}</loc></url>" for r in rotas) + "</urlset>"
         if caminho == "":
             return "<html>" + "".join(f'<a href="/{r}">oferta</a>' for r in self.links_inicio) + "</html>"
@@ -133,8 +133,8 @@ class SiteDoBistek:
         pagina, ordem = int(q["page"][0]), q["order"][0]
         todos = sorted(self.listas[caminho], key=lambda p: p["nome"], reverse=ordem.endswith("DESC"))
         de = (pagina - 1) * self.tamanho
-        if de + self.tamanho > bistek.LIMITE_CONSULTA:
-            return "<html>a busca não passa do limite</html>"
+        if pagina > bistek.MAX_PAGINAS:
+            return "<html>o site não serve esta página</html>"
         return html(todos[de : de + self.tamanho], len(todos), de, self.tamanho)
 
 
@@ -143,7 +143,7 @@ def muitos(n, prefixo="Produto"):
 
 
 def test_le_departamento_maior_que_uma_consulta_nas_duas_ordens(monkeypatch):
-    monkeypatch.setattr(bistek, "LIMITE_CONSULTA", 50)
+    monkeypatch.setattr(bistek, "MAX_PAGINAS", 5)
     site = SiteDoBistek({"mercearia": muitos(64), "bebidas": muitos(25)}, tamanho=10)
     v = Varredura()
     bistek.ler_lista(site, "mercearia", v)
@@ -153,6 +153,24 @@ def test_le_departamento_maior_que_uma_consulta_nas_duas_ordens(monkeypatch):
     bistek.ler_lista(site, "bebidas", v)
     assert len(v.itens) == 64 + 0  # mesmos SKUs: não duplica
     assert site.chamadas[-1].endswith("order=OrderByNameASC&page=3")
+
+
+def test_departamento_maior_que_as_duas_ordens_e_lido_pelas_subcategorias(monkeypatch):
+    monkeypatch.setattr(bistek, "MAX_PAGINAS", 2)  # 20 produtos por ordem, 40 nas duas
+    cafes, massas = muitos(30, "Cafe"), [produto(str(100 + i), TIROL, f"Massa {i:04d} 500g", 1.0) for i in range(25)]
+    site = SiteDoBistek(
+        {"mercearia": cafes + massas, "mercearia/cafes": cafes, "mercearia/massas": massas},
+        departamentos=["mercearia"],
+        categorias=["mercearia/cafes", "mercearia/massas", "bebidas/sucos"],
+        tamanho=10,
+    )
+    v = bistek.varrer(site, "catalogo")
+    assert len(v.itens) == 55 and not v.problemas
+    assert v.listas == ["mercearia", "mercearia/cafes", "mercearia/massas"]
+    # Sem subcategorias para descer, o que sobrou vira problema (a varredura não finge que leu tudo).
+    site.categorias = []
+    v = bistek.varrer(site, "catalogo")
+    assert v.problemas == ["mercearia: 15 produtos além do que as duas ordens alcançam, sem subcategorias"]
 
 
 def test_varre_departamentos_de_mercado_e_colecoes_de_oferta_de_sc():
