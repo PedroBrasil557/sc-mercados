@@ -1,5 +1,6 @@
 """Busca no catálogo: o que a família pode pôr na lista."""
 
+import re
 from datetime import UTC, datetime
 from typing import Annotated
 
@@ -58,3 +59,34 @@ def buscar(
         p["menor_preco_centavos"] = menor[0] if menor else None
         p["menor_preco_rede"] = rede_da_loja[menor[1]] if menor else None
     return produtos
+
+
+# Foto do produto no site de uma rede, para o app mostrar no modo de teste (Expo Go). A foto é da rede ou do
+# fabricante: o app publicado não a usa até haver autorização (ver db/migrations/0016_imagem_no_site.sql).
+_REDES_DA_FOTO = ["Giassi", "Cooper", "Angeloni", "Sam's Club", "Rede Top", "Fort Atacadista"]  # primeira com foto
+_VTEX_IDS = re.compile(r"(/arquivos/ids/\d+)(?:-\d+-\d+)?/")
+
+
+def foto_pequena(url: str, lado: int = 400) -> str:
+    """Na VTEX, /arquivos/ids/123/ vira /arquivos/ids/123-400-400/: o site entrega a imagem já reduzida."""
+    return _VTEX_IDS.sub(rf"\1-{lado}-{lado}/", url, count=1)
+
+
+@router.get("/fotos")
+def fotos(_membro: MembroAtual, conn: Conexao, ids: Annotated[str, Query(max_length=4000)] = ""):
+    """Produto -> endereço da foto no site de uma rede, para até 100 produtos por pedido."""
+    lista = [i for i in ids.split(",") if re.fullmatch(r"[0-9a-f-]{36}", i)][:100]
+    if not lista:
+        return {}
+    linhas = conn.execute(
+        """select pr.produto_id, pr.imagem_url, r.nome as rede from produto_na_rede pr join rede r on r.id = pr.rede_id
+           where pr.produto_id = any(%s::uuid[]) and pr.imagem_url is not null""",
+        (lista,),
+    ).fetchall()
+    ordem = {nome: i for i, nome in enumerate(_REDES_DA_FOTO)}
+    melhor: dict[str, tuple[int, str]] = {}
+    for r in linhas:
+        chave, prioridade = str(r["produto_id"]), ordem.get(r["rede"], 99)
+        if chave not in melhor or prioridade < melhor[chave][0]:
+            melhor[chave] = (prioridade, r["imagem_url"])
+    return {p: foto_pequena(url) for p, (_, url) in melhor.items()}

@@ -21,7 +21,7 @@ export function CartaoDeOferta({ oferta, aoTocar, aoPor }: { oferta: Oferta; aoT
       onPress={aoTocar}
       style={({ pressed }) => [estilos.cartao, { backgroundColor: cor.fundoSuperficie, borderColor: cor.bordaPadrao }, pressed && { opacity: 0.9 }]}
     >
-      <Miniatura porte="M" categoria={p.categoria} marca={p.marca} tamanho={tamanho(p.tamanho, p.unidade)} nome={p.nome} />
+      <Miniatura porte="M" produtoId={p.id} categoria={p.categoria} marca={p.marca} tamanho={tamanho(p.tamanho, p.unidade)} nome={p.nome} />
       <View style={[estilos.desconto, { backgroundColor: cor.marcaEtiqueta }]}>
         <Text style={[fonte("rotulo"), { color: cor.marcaSobreEtiqueta }]}>{encarte ? "ENCARTE" : `−${oferta.desconto_pct}%`}</Text>
       </View>

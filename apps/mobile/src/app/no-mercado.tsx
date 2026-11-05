@@ -137,7 +137,7 @@ export default function NoMercado() {
                 >
                   {item.comprado ? <Icone nome="ok" cor={cor.textoInverso} tamanho={16} /> : null}
                 </View>
-                <Miniatura categoria={item.categoria} tamanho={tamanho(item.tamanho, item.unidade)} nome={item.nome} />
+                <Miniatura produtoId={item.produto_id} categoria={item.categoria} tamanho={tamanho(item.tamanho, item.unidade)} nome={item.nome} />
                 <View style={{ flex: 1, gap: 2 }}>
                   <Text numberOfLines={2} style={[fonte("corpoForte"), { color: cor.textoPrincipal }]}>
                     {item.nome_curto ?? item.nome}

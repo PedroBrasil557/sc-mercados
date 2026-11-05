@@ -58,7 +58,7 @@ export default function Produto() {
       <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
         <View>
           {p ? (
-            <Miniatura porte="G" categoria={p.categoria} marca={p.marca} tamanho={tamanho(p.tamanho, p.unidade)} nome={p.nome} />
+            <Miniatura porte="G" produtoId={id} categoria={p.categoria} marca={p.marca} tamanho={tamanho(p.tamanho, p.unidade)} nome={p.nome} />
           ) : (
             <View style={{ height: 300, backgroundColor: cor.fundoAfundado }} />
           )}
@@ -204,7 +204,7 @@ export default function Produto() {
                         onPress={() => router.push({ pathname: "/produto/[id]", params: { id: e.produto_id } })}
                         style={[estilos.equivalente, { borderBottomColor: cor.bordaPadrao }]}
                       >
-                        <Miniatura categoria={p?.categoria ?? null} tamanho={tamanho(e.tamanho, e.unidade)} nome={e.nome_curto} />
+                        <Miniatura produtoId={e.produto_id} categoria={p?.categoria ?? null} tamanho={tamanho(e.tamanho, e.unidade)} nome={e.nome_curto} />
                         <View style={{ flex: 1, gap: 2 }}>
                           <Text style={[fonte("corpoForte"), { color: cor.textoPrincipal }]}>{e.nome_curto}</Text>
                           <Text style={[fonte("legenda"), { color: cor.textoSuave }]}>{[e.marca, tamanho(e.tamanho, e.unidade)].filter(Boolean).join(" · ")}</Text>
