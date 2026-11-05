@@ -8,18 +8,44 @@ import { Figtree_600SemiBold } from "@expo-google-fonts/figtree/600SemiBold";
 import { Figtree_700Bold } from "@expo-google-fonts/figtree/700Bold";
 import { IBMPlexMono_500Medium } from "@expo-google-fonts/ibm-plex-mono/500Medium";
 import { useFonts } from "expo-font";
-import { Stack } from "expo-router";
+import { type ErrorBoundaryProps, Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
 import { useEffect } from "react";
+import { Pressable, Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { Confirmacao } from "@/componentes/Confirmacao";
+import { instalarRelatorioDeErros, relatarErro } from "@/erros";
 import { useSincroniaAutomatica } from "@/lista/sincronia";
 import { useTema } from "@/tema";
 
 SplashScreen.preventAutoHideAsync();
+instalarRelatorioDeErros();
+
+/** Erro em qualquer tela: avisa a API (aba "Erros do app" do painel) e mostra uma saída em vez de tela branca. */
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  const { cor } = useTema();
+  useEffect(() => {
+    relatarErro(error, "tela", true);
+  }, [error]);
+  return (
+    <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 16, padding: 32, backgroundColor: cor.fundoTela }}>
+      <Text style={{ fontSize: 20, fontWeight: "700", color: cor.textoPrincipal, textAlign: "center" }}>Algo deu errado nesta tela</Text>
+      <Text style={{ fontSize: 15, color: cor.textoSuave, textAlign: "center" }}>
+        Já avisamos a equipe. Sua lista está guardada no celular e não se perdeu.
+      </Text>
+      <Pressable
+        accessibilityRole="button"
+        onPress={retry}
+        style={{ paddingVertical: 14, paddingHorizontal: 28, borderRadius: 12, backgroundColor: cor.estadoEconomia }}
+      >
+        <Text style={{ fontSize: 16, fontWeight: "700", color: cor.textoInverso }}>Tentar de novo</Text>
+      </Pressable>
+    </View>
+  );
+}
 
 export default function RaizLayout() {
   const { cor, modo } = useTema();

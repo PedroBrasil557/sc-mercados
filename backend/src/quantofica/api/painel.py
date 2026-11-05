@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from ..agentes import AGENTES
 from ..coleta import cupom, fort, fort_site
+from . import erros
 from .banco import Conexao
 from .limite import LimiteDeTaxa
 from .produtos import _CONDICAO
@@ -65,6 +66,10 @@ def resumo(conn: Conexao):
         ).fetchone()["n"],
         "casas": conn.execute("select count(*) as n from casa").fetchone()["n"],
         "membros": conn.execute("select count(*) as n from membro").fetchone()["n"],
+        "erros_24h": conn.execute(
+            """select coalesce(sum(vezes), 0) as n from erro_app
+               where ultima_em > now() - interval '24 hours' and ambiente = 'publicado'"""
+        ).fetchone()["n"],
     }
 
 
@@ -199,6 +204,12 @@ def todas_as_lojas(conn: Conexao):
         """select l.id, r.nome as rede, l.nome, l.endereco, l.cnpj from loja l join rede r on r.id = l.rede_id
            order by r.nome, l.nome"""
     ).fetchall()
+
+
+@router.get("/erros")
+def erros_do_app(conn: Conexao):
+    """Erros do app, os mais recentes primeiro (mesmo erro agrupado, com contagem)."""
+    return erros.ultimos(conn)
 
 
 @router.get("/produtos")
