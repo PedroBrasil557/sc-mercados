@@ -38,8 +38,10 @@ AGENTES = [
         "coletor",
         "Coletor de preços",
         "Busca o preço de cada produto do catálogo nos sites do Giassi, da Cooper, do Angeloni, do Sam's, da Rede Top e do Fort, "
-        "loja por loja.",
-        "Todo dia às 5h (Rede Top às 6h, site do Fort às 7h) e quinta às 15h",
+        "loja por loja. No Bistek lê as páginas da loja virtual (o preço do site vale para as duas lojas de Blumenau): "
+        "as ofertas todo dia e o catálogo inteiro uma vez por semana.",
+        "Todo dia às 5h (Rede Top às 6h, ofertas do Bistek às 6h30, site do Fort às 7h), quinta às 15h e "
+        "sábado às 23h (catálogo do Bistek)",
         "Roda e publica sozinho. Preço estranho ou embalagem diferente vai para o Revisor.",
         timedelta(hours=26),
     ),
