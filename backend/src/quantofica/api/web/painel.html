@@ -63,6 +63,7 @@
     <button type="button" data-aba="revisao" aria-pressed="false">Revisão</button>
     <button type="button" data-aba="lojas" aria-pressed="false">Lojas</button>
     <button type="button" data-aba="agentes" aria-pressed="false">Agentes</button>
+    <button type="button" data-aba="erros" aria-pressed="false">Erros do app</button>
     <button type="button" id="sair">Sair</button>
   </nav>
 </header>
@@ -77,6 +78,7 @@
   <section id="revisao" hidden></section>
   <section id="lojas" hidden></section>
   <section id="agentes" hidden></section>
+  <section id="erros" hidden></section>
 </main>
 <script nonce="{{NONCE}}">
 "use strict";
@@ -106,11 +108,11 @@ async function api(caminho, opcoes = {}) {
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || `Erro ${r.status}`);
   return r.json();
 }
-function sair() { token = ""; sessionStorage.removeItem("painel"); $("#abas").hidden = true; for (const s of ["#resumo", "#revisao", "#lojas", "#agentes"]) $(s).hidden = true; $("#entrar").hidden = false; }
+function sair() { token = ""; sessionStorage.removeItem("painel"); $("#abas").hidden = true; for (const s of ["#resumo", "#revisao", "#lojas", "#agentes", "#erros"]) $(s).hidden = true; $("#entrar").hidden = false; }
 function mostrar(aba) {
   for (const b of document.querySelectorAll("#abas [data-aba]")) b.setAttribute("aria-pressed", String(b.dataset.aba === aba));
-  for (const s of ["resumo", "revisao", "lojas", "agentes"]) $("#" + s).hidden = s !== aba;
-  ({ resumo: carregarResumo, revisao: carregarRevisao, lojas: carregarLojas, agentes: carregarAgentes })[aba]();
+  for (const s of ["resumo", "revisao", "lojas", "agentes", "erros"]) $("#" + s).hidden = s !== aba;
+  ({ resumo: carregarResumo, revisao: carregarRevisao, lojas: carregarLojas, agentes: carregarAgentes, erros: carregarErros })[aba]();
 }
 function aviso(alvo, texto, erro = false) { alvo.prepend(el("div", { class: "aviso" + (erro ? " erro" : ""), role: "status" }, texto)); }
 
@@ -229,6 +231,20 @@ function caixaDeSugestao(it, decidir) {
     produtos.length ? el("ul", {}, produtos.map((x) => el("li", {}, x.nome))) : null,
     el("div", { class: "suave" }, `Confiança ${conf}% · conferiu: ${(s.conferido || []).join(", ") || "—"} · ${quando(it.sugestao_em)}`),
     aceitar ? el("div", { class: "acoes" }, aceitar) : null);
+}
+
+async function carregarErros() {
+  const s = $("#erros"); s.replaceChildren(el("p", { class: "suave" }, "Carregando…"));
+  try {
+    const lista = await api("/v1/painel/erros");
+    if (!lista.length) { s.replaceChildren(el("p", {}, "Nenhum erro registrado. 🎉")); return; }
+    s.replaceChildren(
+      el("p", { class: "suave" }, "Erros que o app mandou (sem dado pessoal). O mesmo erro aparece uma vez, com a contagem. \"desenvolvimento\" é o teste no Expo Go."),
+      lista.map((e) => el("article", { class: "cartao" },
+        el("div", {}, el("strong", {}, e.mensagem), e.fatal ? el("span", { class: "saude ruim" }, " fatal") : null),
+        el("div", { class: "suave" }, `${e.onde} · ${e.vezes}x · versão ${e.versao} · ${e.plataforma} · ${e.ambiente} · última: ${quando(e.ultima_em)}`),
+        e.pilha ? el("details", {}, el("summary", {}, "pilha"), el("pre", { style: "white-space:pre-wrap;font-size:12px" }, e.pilha)) : null)));
+  } catch (e) { s.replaceChildren(); aviso(s, e.message, true); }
 }
 
 async function carregarAgentes() {

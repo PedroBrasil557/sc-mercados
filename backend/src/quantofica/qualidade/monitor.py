@@ -83,9 +83,24 @@ def abrir_revisao(conn, tipo: str, anomalia: Anomalia, proposta=None) -> bool:
     return True
 
 
+LIMITE_ERRO_FATAL = 5  # o mesmo erro fatal 5 vezes em 24 h no app publicado: alguém está sem conseguir usar
+
+
+def erros_fatais(conn) -> list[Anomalia]:
+    return [
+        Anomalia(f"erro:{r['assinatura'][:16]}", f"erro fatal no app ({r['vezes']}x em 24 h): {r['mensagem'][:200]}", 1)
+        for r in conn.execute(
+            """select assinatura, mensagem, sum(vezes) as vezes from erro_app
+               where fatal and ambiente = 'publicado' and ultima_em > now() - interval '24 hours'
+               group by assinatura, mensagem having sum(vezes) >= %s""",
+            (LIMITE_ERRO_FATAL,),
+        ).fetchall()
+    ]
+
+
 def verificar(conn, agora: datetime) -> list[Anomalia]:
     """Roda as verificações que dependem do histórico e abre o que achar na fila de revisão."""
-    achadas: list[Anomalia] = []
+    achadas: list[Anomalia] = erros_fatais(conn)
     redes = conn.execute("select id, nome from rede where tem_api").fetchall()
     for r in redes:
         execucoes = conn.execute(
