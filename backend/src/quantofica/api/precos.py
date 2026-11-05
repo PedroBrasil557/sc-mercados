@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Query
 from psycopg import Connection
 from pydantic import BaseModel, Field, model_validator
 
+from ..regras import deslocamento as modos
 from ..regras import totais
 from ..regras.preco import Estado, Faixa, Fonte, Observacao, PrecoExibido, preco_atual
 from .banco import Conexao
@@ -76,6 +77,8 @@ class PedidoComparacao(BaseModel):
     lista_id: UUID | None = None
     itens: dict[UUID, Decimal] | None = None  # produto -> quantidade
     custo_km_centavos: int = Field(default=CUSTO_KM_PADRAO_CENTAVOS, ge=0, le=1000)
+    # Como a casa vai ao mercado: só muda a SUGESTÃO, nunca os valores (regras/deslocamento.py). Sem ele, custo_km.
+    deslocamento: modos.Modo | None = None
     # Loja escolhida pela casa numa rede (tela "Outras lojas da rede"); nas outras redes vale a mais perto (R13).
     preferidas: list[UUID] = Field(default_factory=list, max_length=20)
     # Itens "qualquer marca": cada mercado entra com o equivalente mais barato do mesmo grupo.
@@ -186,14 +189,26 @@ def comparar(pedido: PedidoComparacao, membro: MembroAtual, conn: Conexao):
             if a < b:
                 volta = dist[a] + totais.distancia_km(*coords[a], *coords[b]) + totais.distancia_km(*coords[b], *origem)
                 extras_km[(a, b)] = max(0.0, volta - base_km)
-                custos[(a, b)] = round(extras_km[(a, b)] * pedido.custo_km_centavos)
+                if pedido.deslocamento:
+                    pernas = [dist[a], totais.distancia_km(*coords[a], *coords[b]), totais.distancia_km(*coords[b], *origem)]
+                    custos[(a, b)] = max(
+                        0,
+                        modos.rota(pedido.deslocamento, pernas) - modos.ida_e_volta(pedido.deslocamento, dist[comp.ordem[0]]),
+                    )
+                else:
+                    custos[(a, b)] = round(extras_km[(a, b)] * pedido.custo_km_centavos)
     div = totais.melhor_divisao(itens, tabela, custos)
 
     # Melhor loja para a casa: a mais perto, a não ser que outra pague a viagem a mais e sobre 10 reais (R8).
+    def ida_e_volta(km: float) -> int:
+        if pedido.deslocamento:
+            return modos.ida_e_volta(pedido.deslocamento, km)
+        return totais.custo_deslocamento_centavos(km, pedido.custo_km_centavos)
+
     rec = totais.recomendar(
-        {k: _centavos(v) for k, v in comp.totais.items()}, {k: dist[k] for k in escolhidas}, pedido.custo_km_centavos, seu_id
+        {k: _centavos(v) for k, v in comp.totais.items()}, {k: dist[k] for k in escolhidas}, ida_e_volta, seu_id
     )
-    viagem = {k: totais.custo_deslocamento_centavos(dist[k], pedido.custo_km_centavos) for k in escolhidas}
+    viagem = {k: ida_e_volta(dist[k]) for k in escolhidas}
 
     def nota(loja_id: str) -> str | None:
         if rec is None or loja_id == rec.loja:
@@ -203,11 +218,12 @@ def comparar(pedido: PedidoComparacao, membro: MembroAtual, conn: Conexao):
             return None
         a_mais = max(0, viagem[loja_id] - viagem[rec.loja])
         km_a_mais = max(0.0, dist[loja_id] - dist[rec.loja])
+        # O valor da viagem fica só na conta da sugestão: a tela fala em distância, e quem decide é a pessoa.
         return (
-            f"{_reais(economia)} mais barato na prateleira, mas a ida e volta a {_km(km_a_mais)} a mais custa "
-            f"~{_reais(a_mais)}. Não compensa."
+            f"{_reais(economia)} mais barato no caixa, mas fica {_km(km_a_mais)} mais longe: pela viagem, sugerimos "
+            "o outro. A escolha é sua."
             if a_mais
-            else f"{_reais(economia)} mais barato, mas a diferença é pequena para trocar de mercado."
+            else f"{_reais(economia)} mais barato, mas a diferença é pequena para trocar de mercado. A escolha é sua."
         )
 
     def info_loja(loja_id: str) -> dict:

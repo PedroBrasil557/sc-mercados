@@ -73,7 +73,7 @@ export default function Comparar() {
   const lojas = dados.lojas.length ? [dados.lojas[0]!, ...dados.lojas.slice(1).sort((a, b) => a.total_centavos - b.total_centavos)] : [];
   const maisBarata = lojas[0];
   const menorPrateleira = Math.min(...lojas.map((l) => l.total_centavos));
-  const etiqueta = maisBarata && maisBarata.total_centavos <= menorPrateleira ? "Mais barato" : "Melhor para você";
+  const etiqueta = maisBarata && maisBarata.total_centavos <= menorPrateleira ? "Mais barato" : "Sugestão";
   const poucos = dados.lojas_com_poucos_itens ?? [];
   const foraDaSoma = dados.itens - dados.comuns;
   const nomeDaRede = (id: string) => lojas.find((l) => l.loja_id === id)?.rede ?? "";
@@ -111,7 +111,7 @@ export default function Comparar() {
 
       {maisBarata && lojas.length ? (
         <View style={[estilos.melhor, { backgroundColor: cor.fundoProfundo }]}>
-          <Text style={[fonte("rotulo"), { color: cor.marcaEtiqueta }]}>MELHOR PARA VOCÊ</Text>
+          <Text style={[fonte("rotulo"), { color: cor.marcaEtiqueta }]}>NOSSA SUGESTÃO · VOCÊ ESCOLHE</Text>
           <Text style={[fonte("tituloTela"), { color: cor.textoInverso }]}>{maisBarata.nome}</Text>
           <View style={estilos.valores}>
             <Text style={[fonte("precoGrande"), { color: cor.textoInverso }]}>{reais(maisBarata.total_centavos)}</Text>

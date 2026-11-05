@@ -11,6 +11,7 @@ import { api, ErroDaApi, type Comparacao } from "@/api/cliente";
 import { useMercados } from "./mercado";
 import * as armazem from "./armazem";
 import { useLista } from "./sincronia";
+import type { ModoDeViagem } from "./deslocamento";
 
 export type EstadoDaComparacao = {
   dados: Comparacao | null;
@@ -27,21 +28,25 @@ export function lojasPreferidas(): Record<string, string> {
   return armazem.lerGuardado<Record<string, string>>(CHAVE_PREFERIDAS) ?? {};
 }
 
-/** Quanto custa cada km de ida e volta para a casa (R8): carro, moto ou não contar (a pé, ônibus, já passa perto). */
-export const OPCOES_DE_VIAGEM = [
-  { centavos: 90, nome: "Carro", detalhe: "cerca de R$ 0,90 por km, ida e volta" },
-  { centavos: 40, nome: "Moto", detalhe: "cerca de R$ 0,40 por km, ida e volta" },
-  { centavos: 0, nome: "Não contar", detalhe: "a pé, de ônibus ou quando já passo perto" },
-] as const;
-
-export function custoKm(): number {
-  return armazem.lerGuardado<number>("custo_km") ?? 90;
+/** Como a casa vai ao mercado (lista/deslocamento.ts): só muda a sugestão, nunca os valores. */
+export function modoDeViagem(): ModoDeViagem {
+  const guardado = armazem.lerGuardado<ModoDeViagem>("modo_viagem");
+  if (guardado) return guardado;
+  // Antes era só o custo por km: 90 carro, 40 moto, 0 "não contar".
+  const antigo = armazem.lerGuardado<number>("custo_km");
+  return antigo === 40 ? "moto" : antigo === 0 ? "a_pe" : "carro";
 }
 
-export function definirCustoKm(centavos: number): void {
-  armazem.guardar("custo_km", centavos);
+export function definirModoDeViagem(modo: ModoDeViagem): void {
+  armazem.guardar("modo_viagem", modo);
   ultimaChave = "";
   ouvintes.forEach((f) => f());
+}
+
+/** Custo por km do jeito antigo (para a API que ainda não recebe o modo). */
+export function custoKm(): number {
+  const m = modoDeViagem();
+  return m === "carro" ? 90 : m === "moto" ? 40 : 0;
 }
 
 /** A casa escolhe a loja de uma rede; a comparação passa a usar ela no lugar da mais perto. */
@@ -73,7 +78,7 @@ async function calcular(chave: string, bairroId: string, itens: Record<string, n
   const meu = ++pedido;
   mudar({ carregando: true });
   try {
-    const dados = Object.keys(itens).length ? await api.comparar(bairroId, itens, Object.values(lojasPreferidas()), custoKm(), genericos) : null;
+    const dados = Object.keys(itens).length ? await api.comparar(bairroId, itens, Object.values(lojasPreferidas()), custoKm(), genericos, modoDeViagem()) : null;
     if (meu !== pedido) return; // chegou uma resposta mais nova
     ultimaChave = chave;
     const calculadaEm = Date.now();
@@ -109,7 +114,7 @@ export function useComparacao(): EstadoDaComparacao & { atualizar: () => void } 
   const mercados = useMercados(); // trocar o seu mercado refaz a conta
   const bairroId = sessao?.bairro_id ?? null;
   const chave = bairroId
-    ? `${bairroId}|${mercados?.seu_mercado?.loja_id ?? ""}|${JSON.stringify(Object.entries(quantidades).sort())}|${genericos.join(",")}|${JSON.stringify(lojasPreferidas())}|${custoKm()}`
+    ? `${bairroId}|${mercados?.seu_mercado?.loja_id ?? ""}|${JSON.stringify(Object.entries(quantidades).sort())}|${genericos.join(",")}|${JSON.stringify(lojasPreferidas())}|${modoDeViagem()}`
     : "";
 
   useEffect(() => {
