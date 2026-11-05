@@ -1,0 +1,45 @@
+name: Bistek
+
+# Preços do Bistek em Blumenau pelas páginas da loja virtual (o robots.txt proíbe a API; as páginas de departamento e
+# de coleção são permitidas). Cada página pesa ~2,5 MB, 1 requisição por segundo:
+# - ofertas (todo dia): as coleções de oferta de SC, ~150 páginas, perto de 10 minutos;
+# - catálogo (sábado à noite): todos os departamentos de mercado, ~800 páginas, perto de 1 hora. Roda antes do
+#   Catalogador de domingo, que marca o que as redes VTEX não vendem (inclusive os produtos novos daqui).
+on:
+  schedule:
+    - cron: "30 9 * * *"  # todo dia às 6h30 de Brasília: ofertas
+    - cron: "0 2 * * 0"  # sábado às 23h de Brasília: catálogo inteiro
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: "ofertas ou catalogo"
+        required: true
+        default: ofertas
+        type: choice
+        options: [ofertas, catalogo]
+
+concurrency:
+  group: bistek
+  cancel-in-progress: false
+
+jobs:
+  coletar:
+    if: vars.COLETA_ATIVA == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - run: python -m pip install .
+      - name: Bistek
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          MODO: ${{ inputs.modo || (github.event.schedule == '0 2 * * 0' && 'catalogo') || 'ofertas' }}
+        run: python -m quantofica.coleta.bistek "--$MODO"

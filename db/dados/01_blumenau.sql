@@ -41,7 +41,7 @@ insert into bairro (cidade_id, nome, lat_centro, lon_centro) select id, 'Água V
 
 insert into rede (nome, site, tem_api) values ('Angeloni', 'super.angeloni.com.br', true) on conflict (nome) do update set site = excluded.site, tem_api = excluded.tem_api;
 insert into rede (nome, site, tem_api) values ('Atacadão', null, false) on conflict (nome) do update set site = excluded.site, tem_api = excluded.tem_api;
-insert into rede (nome, site, tem_api) values ('Bistek', null, false) on conflict (nome) do update set site = excluded.site, tem_api = excluded.tem_api;
+insert into rede (nome, site, tem_api) values ('Bistek', 'www.bistek.com.br', true) on conflict (nome) do update set site = excluded.site, tem_api = excluded.tem_api;
 insert into rede (nome, site, tem_api) values ('Brasil Atacadista', null, false) on conflict (nome) do update set site = excluded.site, tem_api = excluded.tem_api;
 insert into rede (nome, site, tem_api) values ('Carol', null, false) on conflict (nome) do update set site = excluded.site, tem_api = excluded.tem_api;
 insert into rede (nome, site, tem_api) values ('Casa Express', null, false) on conflict (nome) do update set site = excluded.site, tem_api = excluded.tem_api;
