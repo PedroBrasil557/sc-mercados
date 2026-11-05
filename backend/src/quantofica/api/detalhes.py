@@ -77,7 +77,8 @@ def detalhe(
     """O produto e o preço atual em cada loja da cidade, do mais barato ao mais caro (R5, R6, R13)."""
     produto = conn.execute(
         """select p.id, p.nome_humano as nome, p.marca, p.tamanho, p.unidade, p.categoria_id as categoria,
-                  (select min(codigo) from ean e where e.produto_id = p.id) as ean
+                  (select min(codigo) from ean e where e.produto_id = p.id) as ean,
+                  coalesce((p.atributos->>'por_kg')::boolean, false) as por_kg
            from produto p where p.id = %s""",
         (produto_id,),
     ).fetchone()
@@ -101,6 +102,8 @@ def detalhe(
                 }
             )
     precos.sort(key=lambda x: (x["preco_centavos"], x["distancia_km"]))
+    if produto["por_kg"]:
+        _nomes_no_site(conn, produto_id, precos)
     extra = _no_seu_mercado(conn, membro, produto, precos, custo_km, deslocamento)
     # Gráfico "Preço no <loja>, últimos 30 dias": no seu mercado (ou na loja mais barata, se ele não vende).
     historico = []
@@ -114,6 +117,23 @@ def detalhe(
             for dia, v in serie_diaria(mudancas.get((str(loja_historico), str(produto_id)), []), 30, agora)
         ]
     return {"produto": produto, "precos": precos, "historico": historico} | extra
+
+
+def _nomes_no_site(conn: Connection, produto_id: UUID, precos: list[dict]) -> None:
+    """Item por quilo: qualquer marca, então cada loja diz qual item dela entrou (o SKU está na evidência)."""
+    nomes = {
+        r["sku"]: r["nome_no_site"]
+        for r in conn.execute("select sku, nome_no_site from produto_na_rede where produto_id = %s", (produto_id,)).fetchall()
+    }
+    evidencias = {
+        str(r["loja_id"]): r["evidencia_id"]
+        for r in conn.execute(
+            "select loja_id, evidencia_id from preco_atual where produto_id = %s and evidencia_id like 'vtex:%%'", (produto_id,)
+        ).fetchall()
+    }
+    for p in precos:
+        sku = (evidencias.get(str(p["loja_id"])) or "").rsplit(":", 1)[-1]
+        p["nome_no_site"] = nomes.get(sku)
 
 
 def _mudancas(
@@ -295,7 +315,9 @@ def ofertas(membro: MembroAtual, conn: Conexao, limite: Annotated[int, Query(ge=
     produtos = {
         str(r["id"]): r
         for r in conn.execute(
-            "select id, nome_humano as nome, marca, tamanho, unidade, categoria_id as categoria from produto where id = any(%s)",
+            """select p.id, p.nome_humano as nome, p.marca, p.tamanho, p.unidade, p.categoria_id as categoria,
+                  coalesce((p.atributos->>'por_kg')::boolean, false) as por_kg
+                from produto p where p.id = any(%s)""",
             (candidatos,),
         ).fetchall()
     }
@@ -381,7 +403,8 @@ def por_ean(codigo: str, _membro: MembroAtual, conn: Conexao):
     except ValueError as e:
         raise HTTPException(422, "código de barras inválido") from e
     produto = conn.execute(
-        """select p.id, p.nome_humano as nome, p.marca, p.tamanho, p.unidade, p.categoria_id as categoria
+        """select p.id, p.nome_humano as nome, p.marca, p.tamanho, p.unidade, p.categoria_id as categoria,
+                  coalesce((p.atributos->>'por_kg')::boolean, false) as por_kg
            from ean e join produto p on p.id = e.produto_id where e.codigo = %s""",
         (gtin,),
     ).fetchone()

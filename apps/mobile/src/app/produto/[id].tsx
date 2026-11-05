@@ -47,6 +47,10 @@ export default function Produto() {
   const linhaDoSeu = detalhe?.por_rede?.find((l) => seu && l.loja_id === seu.loja_id);
   const outrasRedes = (detalhe?.por_rede ?? []).filter((l) => !seu || l.loja_id !== seu.loja_id);
   const menorPreco = Math.min(...outrasRedes.map((l) => l.preco_centavos ?? Infinity));
+  // Item por quilo (fase 1): preço do quilo, qualquer marca; pôr na lista vem na fase 2.
+  const porKg = !!p?.por_kg;
+  const kg = porKg ? "/kg" : "";
+  const nomeNaLoja = (lojaId: string) => (porKg ? detalhe?.precos.find((x) => x.loja_id === lojaId)?.nome_no_site : null);
   const pôr = (qualquerMarca: boolean) => {
     if (!p) return;
     adicionarProduto(p, { qualquerMarca });
@@ -58,7 +62,14 @@ export default function Produto() {
       <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
         <View>
           {p ? (
-            <Miniatura porte="G" produtoId={id} categoria={p.categoria} marca={p.marca} tamanho={tamanho(p.tamanho, p.unidade)} nome={p.nome} />
+            <Miniatura
+              porte="G"
+              produtoId={id}
+              categoria={p.categoria}
+              marca={p.marca}
+              tamanho={porKg ? "kg" : tamanho(p.tamanho, p.unidade)}
+              nome={p.nome}
+            />
           ) : (
             <View style={{ height: 300, backgroundColor: cor.fundoAfundado }} />
           )}
@@ -71,7 +82,7 @@ export default function Produto() {
                 aoTocar={() =>
                   void Share.share({
                     message: maisBarato
-                      ? `${p.nome}: ${reais(maisBarato.preco_centavos)} no ${maisBarato.nome} (SC Mercados)`
+                      ? `${p.nome}: ${reais(maisBarato.preco_centavos)}${kg} no ${maisBarato.nome} (SC Mercados)`
                       : `${p.nome} no SC Mercados`,
                   })
                 }
@@ -96,10 +107,22 @@ export default function Produto() {
                   {p?.nome_curto ?? p?.nome}
                 </Text>
                 <Text style={[fonte("corpoPadrao"), { color: cor.textoSuave }]}>
-                  {[marca(p?.marca), tamanho(p?.tamanho ?? null, p?.unidade ?? null)].filter(Boolean).join(" · ")}
+                  {porKg
+                    ? "Vendido por quilo · qualquer marca"
+                    : [marca(p?.marca), tamanho(p?.tamanho ?? null, p?.unidade ?? null)].filter(Boolean).join(" · ")}
                 </Text>
                 {p?.ean ? <SeloDeFonte texto={`EAN ${p.ean.replace(/^0+/, "")}`} /> : null}
               </View>
+
+              {porKg ? (
+                <View style={[estilos.veredito, { backgroundColor: cor.fundoAfundado, borderColor: cor.bordaPadrao }]}>
+                  <Icone nome="info" cor={cor.textoSuave} tamanho={16} />
+                  <Text style={[fonte("corpoMenor"), { color: cor.textoSuave, flex: 1 }]}>
+                    Preço do quilo. Cada mercado entra com o item mais barato deste tipo, de qualquer marca; a marca e a
+                    qualidade podem variar. Pôr na lista e somar no total chega na próxima versão.
+                  </Text>
+                </View>
+              ) : null}
 
               {seu ? (
                 <View style={[estilos.cartao, { backgroundColor: cor.fundoSuperficie, borderColor: cor.estadoEconomia, borderWidth: 1.5 }]}>
@@ -109,14 +132,22 @@ export default function Produto() {
                       <View style={estilos.nome}>
                         <View style={{ flex: 1, gap: 2 }}>
                           <Text style={[fonte("corpoForte"), { color: cor.textoPrincipal }]}>{seu.nome}</Text>
+                          {nomeNaLoja(seu.loja_id) ? (
+                            <Text style={[fonte("legenda"), { color: cor.textoSuave }]}>{nomeNaLoja(seu.loja_id)}</Text>
+                          ) : null}
                           <Text style={[fonte("legenda"), { color: cor.textoSuave }]}>
                             {km(seu.distancia_km)}
                             {(linhaDoSeu?.lojas_mesmo_preco ?? 0) > 1 ? ` · mesmo preço nas ${linhaDoSeu?.lojas_mesmo_preco} lojas ${seu.rede}` : ""}
                           </Text>
                         </View>
                         <View style={{ alignItems: "flex-end" }}>
-                          <Text style={[fonte("precoGrande"), { color: cor.textoPrincipal }]}>{reais(seu.preco_centavos)}</Text>
-                          {seu.preco_por_unidade ? <Text style={[fonte("legenda"), { color: cor.textoSuave }]}>{seu.preco_por_unidade}</Text> : null}
+                          <Text style={[fonte("precoGrande"), { color: cor.textoPrincipal }]}>
+                            {reais(seu.preco_centavos)}
+                            {porKg ? <Text style={[fonte("corpoPadrao"), { color: cor.textoSuave }]}>/kg</Text> : null}
+                          </Text>
+                          {seu.preco_por_unidade && !porKg ? (
+                            <Text style={[fonte("legenda"), { color: cor.textoSuave }]}>{seu.preco_por_unidade}</Text>
+                          ) : null}
                         </View>
                       </View>
                       {seu.observado_em ? <SeloDeFonte texto={seloDeFonte(seu.fonte ?? "site", seu.observado_em)} /> : null}
@@ -137,7 +168,7 @@ export default function Produto() {
                   <View style={{ flex: 1, gap: 4 }}>
                     <Text style={[fonte("corpoForte"), { color: cor.textoPrincipal }]}>Vale ir em outro mercado?</Text>
                     <Text style={[fonte("corpoMenor"), { color: cor.textoSuave }]}>
-                      No {detalhe.veredito.rede} sai {reais(detalhe.veredito.economia_centavos)} mais barato
+                      No {detalhe.veredito.rede} sai {reais(detalhe.veredito.economia_centavos)} mais barato{porKg ? " o quilo" : ""}
                       {detalhe.veredito.km_ida_e_volta ? `, com ${km(detalhe.veredito.km_ida_e_volta)} a mais de ida e volta` : ""}.{" "}
                       {detalhe.veredito.compensa ? "Compensa ir até lá." : "Só por este item, não compensa; vale se você já for passar lá."}
                     </Text>
@@ -158,7 +189,7 @@ export default function Produto() {
                         <Pressable
                           key={l.loja_id}
                           accessibilityRole="button"
-                          accessibilityLabel={`${l.rede} ${l.bairro ?? ""}: ${l.preco_centavos ? reais(l.preco_centavos) : (l.motivo ?? "sem preço")}`}
+                          accessibilityLabel={`${l.rede} ${l.bairro ?? ""}: ${l.preco_centavos ? `${reais(l.preco_centavos)}${porKg ? " o quilo" : ""}` : (l.motivo ?? "sem preço")}`}
                           accessibilityHint={preco ? "Toque se viu outro preço na prateleira desta loja" : undefined}
                           disabled={!preco}
                           onPress={() => preco && setReportando(preco)}
@@ -175,9 +206,14 @@ export default function Produto() {
                               {l.motivo ? ` · ${l.motivo}` : ""}
                               {(l.lojas_mesmo_preco ?? 0) > 1 ? ` · mesmo preço em ${l.lojas_mesmo_preco} lojas` : ""}
                             </Text>
+                            {nomeNaLoja(l.loja_id) ? (
+                              <Text numberOfLines={1} style={[fonte("legenda"), { color: cor.textoSuave }]}>
+                                {nomeNaLoja(l.loja_id)}
+                              </Text>
+                            ) : null}
                           </View>
                           <Text style={[fonte("precoMedio"), { color: l.preco_centavos ? cor.textoPrincipal : cor.textoSuave }]}>
-                            {l.preco_centavos ? reais(l.preco_centavos) : "—"}
+                            {l.preco_centavos ? `${reais(l.preco_centavos)}${kg}` : "—"}
                           </Text>
                         </Pressable>
                       );
@@ -254,7 +290,7 @@ export default function Produto() {
           loja={reportando ? { id: reportando.loja_id, nome: reportando.nome, preco_centavos: reportando.preco_centavos } : null}
         />
       ) : null}
-      {p ? (
+      {p && !porKg ? (
         <View style={[estilos.rodape, { paddingBottom: margem.bottom + 12 }]}>
           {naLista ? (
             <Botao largo rotulo={`Na sua lista · ${quantidade(naLista.quantidade)} · somar 1`} aoTocar={() => pôr(false)} />

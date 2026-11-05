@@ -35,6 +35,7 @@ from psycopg.rows import dict_row
 from ..agentes import rodada
 from ..regras import ean as ean_util
 from ..regras import tamanho
+from . import por_peso
 from . import redes as config
 from .vtex import BloqueadoPeloRobots, ClienteHttp, Http, Rede
 
@@ -56,6 +57,7 @@ class ItemDoSite:
     granel: bool
     disponivel: bool
     imagem: str | None = None  # foto no site da rede: só para teste no app (ver migração 0016)
+    por_kg: bool = False  # vendido por quilo: liga a um genérico (coleta/por_peso.py)
 
 
 def _simples(texto: str) -> str:
@@ -172,11 +174,14 @@ def itens(produto: dict, rede: str) -> list[ItemDoSite]:
         gtin = ean_util.gtin_de_produto(item.get("ean"))  # código interno de loja nunca liga redes (R1)
         ofertas = [s.get("commertialOffer") or {} for s in item.get("sellers") or []]
         disponivel = any(o.get("AvailableQuantity", 0) > 0 and o.get("Price", 0) > 0 for o in ofertas)
-        granel = (item.get("measurementUnit") or "un").lower() == "kg" or (item.get("unitMultiplier") or 1) != 1
+        por_kg = (item.get("measurementUnit") or "un").lower() == "kg"
+        granel = por_kg or (item.get("unitMultiplier") or 1) != 1
         imagens = item.get("images") or []
         imagem = imagens[0].get("imageUrl") if imagens else None
         saida.append(
-            ItemDoSite(rede, str(item.get("itemId")), gtin, _nome(produto, item), marca, caminho, granel, disponivel, imagem)
+            ItemDoSite(
+                rede, str(item.get("itemId")), gtin, _nome(produto, item), marca, caminho, granel, disponivel, imagem, por_kg
+            )
         )
     return saida
 
@@ -226,8 +231,10 @@ def _tentar(ler, *args):
     return None
 
 
-def varrer(http: Http, rede: Rede) -> Varredura:
-    """Percorre as categorias de mercado da rede. Categoria grande demais para uma consulta desce um nível."""
+def varrer(http: Http, rede: Rede, departamentos: re.Pattern | None = None) -> Varredura:
+    """Percorre as categorias de mercado da rede. Categoria grande demais para uma consulta desce um nível.
+
+    `departamentos` lê só os departamentos cujo nome (sem acento) casa com o padrão."""
     v = Varredura([], True, 0, [])
     try:
         arvore = http(f"https://{rede.dominio}/api/catalog_system/pub/category/tree/3", None)
@@ -304,7 +311,7 @@ def varrer(http: Http, rede: Rede) -> Varredura:
                 visitar(cadeia + [f])
 
     for dep in arvore:
-        if FORA.search(_simples(dep["name"])):
+        if FORA.search(_simples(dep["name"])) or (departamentos and not departamentos.search(_simples(dep["name"]))):
             continue
         v.departamentos.append(dep["name"])
         visitar([dep])
@@ -399,6 +406,8 @@ def gravar(conn: psycopg.Connection, rede: Rede, varredura: Varredura, agora: da
             )
         outra_embalagem = {g for _, g in recusados.values()}
         ausentes = marcar_ausentes(conn, rede, varredura, agora, outra_embalagem) if marcar else 0
+    # Itens vendidos por quilo não têm código de barras comum: ligam a um genérico pelo nome (regra estrita).
+    por_kg = por_peso.ligar(conn, rede, varredura.itens, completa=varredura.completa)
     return {
         "paginas": varredura.paginas,
         "skus": len(varredura.itens),
@@ -409,6 +418,7 @@ def gravar(conn: psycopg.Connection, rede: Rede, varredura: Varredura, agora: da
         "descartes": {k: n for k, n in conta.items() if k != "novos"},
         "fora_do_mercado": dict(fora.most_common(8)),
         "outra_embalagem": outra_embalagem,
+        "por_kg": por_kg["ligados"],
     }
 
 
@@ -486,7 +496,9 @@ def main(argv: list[str] | None = None, http: Http | None = None) -> int:
                     resumo[config.NOME_NO_BANCO[rede.id]] = {"falhou": repr(erro)[:300]}
                     print(f"{rede.id}: falhou: {erro!r}", file=sys.stderr)
                     continue
-                resumo[config.NOME_NO_BANCO[rede.id]] = {k: r[k] for k in ("skus", "ligados", "novos", "ausentes", "completa")}
+                resumo[config.NOME_NO_BANCO[rede.id]] = {
+                    k: r[k] for k in ("skus", "ligados", "novos", "ausentes", "completa", "por_kg")
+                }
                 if varreduras[rede.id].problemas:
                     resumo[config.NOME_NO_BANCO[rede.id]]["problemas"] = len(varreduras[rede.id].problemas)
                 print(rede.id, r, flush=True)

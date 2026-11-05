@@ -74,6 +74,8 @@ export type Produto = {
   nome_curto?: string | null;
   menor_preco_centavos?: number | null;
   menor_preco_rede?: string | null;
+  /** Vendido por quilo: genérico "qualquer marca", o preço é o do quilo (fase 1: ainda não vai para a lista). */
+  por_kg?: boolean;
 };
 export type ItemDaLista = {
   id: string;
@@ -146,6 +148,7 @@ export type Mercado = LojaPublica & { tipo_preco: TipoPreco };
 export type Mercados = { seu_mercado: Mercado | null; automatico: boolean; lojas: Mercado[] };
 export type ResultadoDaBusca = {
   produto_id: string;
+  por_kg?: boolean;
   nome: string;
   nome_curto: string;
   marca: string | null;
@@ -211,6 +214,8 @@ export type PrecoNaLoja = LojaPublica & {
   fonte: string;
   observado_em: string;
   estado: "valido" | "pode_ter_mudado";
+  /** Item por quilo: o item desta loja que entrou no preço (ex.: "Pão Francês Giassi Kg"). */
+  nome_no_site?: string | null;
 };
 export type DetalheDoProduto = {
   produto: Produto & { ean: string | null; nome_curto?: string };

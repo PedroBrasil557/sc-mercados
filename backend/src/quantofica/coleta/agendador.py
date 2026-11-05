@@ -25,7 +25,7 @@ from ..agentes import rodada
 from ..qualidade import monitor
 from ..qualidade.monitor import Anomalia
 from ..regras.preco import Faixa
-from . import gravar
+from . import gravar, por_peso
 from . import redes as config
 from .gravar import Preco
 from .vtex import ClienteHttp, Http, PrecoColetado, Rede, coletar
@@ -214,6 +214,15 @@ def main(argv: list[str] | None = None, http: Http | None = None) -> int:
                     falhas += 1
                     resumo[config.NOME_NO_BANCO[rede.id]] = {"falhou": repr(erro)[:300]}
                     print(f"{rede.id}: falhou: {erro!r}", file=sys.stderr)
+                    continue
+                try:  # itens por quilo: o preço do quilo dos genéricos ligados (coleta/por_peso.py)
+                    k = por_peso.coletar(conn, http, rede, datetime.now(UTC))
+                    resumo[r["rede"]]["por_kg"] = k["precos"]
+                    print(k)
+                except Exception as erro:
+                    falhas += 1
+                    resumo[r["rede"]]["por_kg"] = {"falhou": repr(erro)[:300]}
+                    print(f"{rede.id}: por quilo falhou: {erro!r}", file=sys.stderr)
         with rodada(conn, "vigia") as resumo:
             achadas = monitor.verificar(conn, datetime.now(UTC))
             resumo["apontados"] = len(achadas)
