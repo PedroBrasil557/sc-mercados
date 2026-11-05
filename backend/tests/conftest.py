@@ -15,7 +15,7 @@ from quantofica.banco.migrar import migrar
 
 PASTA_DB = Path(__file__).resolve().parents[2] / "db"
 ADMIN = os.environ.get("TEST_ADMIN_DATABASE_URL", "postgresql://quantofica:local-apenas@localhost:54329/postgres")
-NOME = "quantofica_teste"
+NOME = os.environ.get("TEST_DB_NAME", "quantofica_teste")  # outro nome deixa rodar testes em paralelo
 
 
 @pytest.fixture(scope="module")
