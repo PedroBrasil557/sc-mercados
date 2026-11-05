@@ -199,6 +199,7 @@ class TestPaginaDoKomprao:
         assert doc == {
             "id": "261030120000-76198a65",
             "paginas": [f"https://image.isu.pub/261030120000-76198a65/jpg/page_{n}.jpg" for n in (1, 2)],
+            "camadas": [None, None],  # sem camada de texto: as páginas vão para o OCR
             "publicado_em": date(2026, 10, 30),
         }
 
@@ -317,12 +318,17 @@ def test_rodar_grava_os_precos_nas_tres_lojas_de_blumenau(banco):
         "itens": 5,
         "precos": 6,
     }
-    assert resumo == {"ambiguos": 2, "produtos_novos": 1, "revisao": 1, "duvidosos": 1, "encartes": 1, "itens": 5, "precos": 6}
+    assert resumo == {
+        "ambiguos": 2, "produtos_novos": 1, "revisao": 1, "duvidosos": 1, "encartes": 1, "itens": 5, "precos": 6,
+        "paginas_por_ocr": 2,
+    }  # fmt: skip
 
     # No dia seguinte o mesmo encarte é pulado: nada de imagem baixada, OCR ou busca nos sites
     http.baixados.clear()
     assert komprao.rodar(banco, http, agora + timedelta(days=1), ler_pagina=ler) == {}
-    assert http.baixados == [komprao.PAGINA, "https://reader3.isu.pub/superkoch/kompr_o_fim_de_semana_07/reader3_4.json"]
+    assert http.baixados == [
+        komprao.PAGINA, komprao.PERFIL, "https://reader3.isu.pub/superkoch/kompr_o_fim_de_semana_07/reader3_4.json"
+    ]  # fmt: skip
 
     # O Revisor não liga sozinho o item de leitura incerta, mesmo que o nome case: fica para uma pessoa
     d = revisor.decidir_encarte(feijao, agora.date(), date(2026, 11, 1), [])
@@ -379,7 +385,7 @@ def test_pagina_que_nao_baixou_tenta_de_novo_amanha(banco):
     def ler(imagem, n, publicado_em):
         return pagina(validade=(None, date(2026, 11, 1)))
 
-    assert komprao.rodar(banco, SemImagem(), datetime(2026, 10, 31, 12, tzinfo=UTC), ler_pagina=ler) == {}
+    assert komprao.rodar(banco, SemImagem(), datetime(2026, 10, 31, 12, tzinfo=UTC), ler_pagina=ler) == {"paginas_por_ocr": 1}
     assert banco.execute("select count(*) as n from encarte_lido").fetchone()["n"] == 0
 
 

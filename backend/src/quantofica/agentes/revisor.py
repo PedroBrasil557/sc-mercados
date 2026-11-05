@@ -335,7 +335,7 @@ def _rodar(conn, http, agora, buscar_nos_sites, resumo) -> None:
     produtos_do_fort = {
         p
         for i in itens
-        if (i["proposta"] or {}).get("origem") == fort_site.ORIGEM
+        if _do_site_do_fort(i["proposta"])
         for p in ((i["proposta"] or {}).get("produtos") or [i["referencia_id"].rsplit(":", 1)[-1]])
     }
     medianas = fort_site.medianas_nos_outros(conn, rede_fort["id"], sorted(produtos_do_fort), agora) if rede_fort else {}
@@ -372,7 +372,7 @@ def _rodar(conn, http, agora, buscar_nos_sites, resumo) -> None:
                             "divergia já foi desligado).", conferido=["nome no site de cada rede"])  # fmt: skip
             else:
                 d = decidir_tamanho_divergente(motivo)
-        elif tipo == "anomalia" and (item["proposta"] or {}).get("origem") == fort_site.ORIGEM:
+        elif tipo == "anomalia" and _do_site_do_fort(item["proposta"]):
             d = decidir_trava_do_fort(item["proposta"], medianas.get(item["referencia_id"].rsplit(":", 1)[-1]))
         elif tipo == "anomalia" and motivo == "preço mais de 50% longe da mediana de 30 dias":
             d = Decisao("resolver", 0.95, "Alerta da regra antiga, que comparava redes diferentes (diferença grande entre "
@@ -437,6 +437,12 @@ def _rodar(conn, http, agora, buscar_nos_sites, resumo) -> None:
             resumo["sugestoes"] += 1
         else:
             resumo["para_voce"] += 1
+
+
+def _do_site_do_fort(proposta: dict | None) -> bool:
+    """Item que veio do site do Fort (os alertas anteriores a 04/11/2026 não têm "origem", só a evidência)."""
+    p = proposta or {}
+    return p.get("origem") == fort_site.ORIGEM or str(p.get("evidencia") or "").startswith(f"{fort_site.ORIGEM}:")
 
 
 def _mediana(conn, referencia: str, agora: datetime) -> int | None:
