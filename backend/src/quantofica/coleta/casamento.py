@@ -171,3 +171,57 @@ def casar_estrito(nome: str, marca: str | None, candidatos: list[Candidato]) -> 
 
 def _simples_marca(marca: str) -> str:
     return " ".join(palavras(marca))
+
+
+# ---------- famílias do catálogo (marca + tamanho) ----------
+_SEMPRE_DIFERENTE = re.compile(r"^(n\d+|\d+un|sem_.+|com_.+)$")  # número, quantidade, "sem X"/"com X"
+
+
+def tracos_de_variante(nome: str, marca: str | None) -> set[str]:
+    """Os traços sem as palavras neutras e sem o "tipo 1" (classificação do grão, não variante)."""
+    t = tracos(nome, marca) - NEUTRAS
+    ws = palavras(nome)
+    for i, w in enumerate(ws[:-1]):
+        if w == "tipo" and ws[i + 1].isdigit():
+            t.discard(f"n{ws[i + 1]}")
+    return t
+
+
+class Familias:
+    """O catálogo agrupado por marca e tamanho. Dentro de uma família, as palavras que mudam de um produto para outro
+    (sabor, linha, cor) são as que separam variantes; elas dizem quando um nome a mais é descrição e quando é outro
+    produto. Base da decisão do Revisor sobre ligações sem código de barras (análise de 04/11/2026)."""
+
+    def __init__(self, candidatos: list[Candidato]):
+        self.por_id = {c.chave: c for c in candidatos}
+        self.grupos: dict[tuple, list[Candidato]] = {}
+        for c in candidatos:
+            if c.tamanho and c.marca:
+                self.grupos.setdefault(self._chave(c.marca, c.tamanho), []).append(c)
+        self.separa_variantes: dict[str, int] = {}
+        for g in self.grupos.values():
+            if len(g) < 2:
+                continue
+            ts = [tracos_de_variante(c.nome, c.marca) for c in g]
+            for w in set.union(*ts) - set.intersection(*ts):
+                self.separa_variantes[w] = self.separa_variantes.get(w, 0) + 1
+
+    @staticmethod
+    def _chave(marca: str, t: tam.Tamanho) -> tuple:
+        return (" ".join(palavras(marca)), t.unidade, round(t.quantidade))
+
+    def mesma_variante(self, nome: str, marca: str | None, produto_id: str) -> tuple[bool, list[str]]:
+        """O produto do site é a mesma variante do produto do catálogo? Devolve (sim, palavras que impedem)."""
+        c = self.por_id.get(produto_id)
+        if c is None or not c.marca or c.tamanho is None:
+            return False, ["produto fora do catálogo"]
+        familia = self.grupos.get(self._chave(c.marca, c.tamanho), [])
+        irmaos = [tracos_de_variante(x.nome, x.marca) for x in familia if x.chave != c.chave]
+        f, k = tracos_de_variante(nome, marca), tracos_de_variante(c.nome, c.marca)
+        so_site, so_catalogo = f - k, k - f
+        ruins = {w for w in so_site | so_catalogo if _SEMPRE_DIFERENTE.match(w) or w in DIFERENCIAIS}
+        # Palavra do catálogo que separa irmãos da mesma família: o site não disse qual variante é.
+        ruins |= {w for w in so_catalogo if any(w in s for s in irmaos) and any(w not in s for s in irmaos)}
+        # Palavra do site que é de um irmão, ou que separa variantes em qualquer família: o site disse outra variante.
+        ruins |= {w for w in so_site if any(w in s for s in irmaos) or self.separa_variantes.get(w, 0) >= 1}
+        return not ruins, sorted(ruins)

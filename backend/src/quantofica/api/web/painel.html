@@ -201,7 +201,7 @@ function cartaoDeRevisao(it, marcados, atualizar, decidir) {
   return el("article", { class: "item" }, caixa, corpo);
 }
 
-const ACOES = { descartar: "descartar", resolver: "marcar como resolvido", ligar: "ligar ao produto", sugerir: "sugere", humano: "precisa de você" };
+const ACOES = { descartar: "descartar", resolver: "marcar como resolvido", ligar: "ligar ao produto", sugerir: "sugere", humano: "precisa de você", aguardar: "aguarda a próxima coleta", confirmar: "confirmar a ligação", desligar: "desligar a rede" };
 function caixaDeSugestao(it, decidir) {
   const p = it.proposta || {};
   const s = it.sugestao, conf = Math.round((it.sugestao_confianca || 0) * 100);

@@ -35,10 +35,16 @@ def test_planejar_grava_so_preco_da_loja_e_manda_o_resto_para_revisao():
     assert sorted(r.anomalia.referencia for r in plano.revisar) == ["giassi:07622210592750", "seller:giassi:giassi99"]
 
 
-def test_planejar_segura_preco_fora_da_curva():
-    plano = agendador.planejar([coletado(ARROZ, preco=5990)], {"giassi01": "L1"}, {ARROZ: "P"}, {"P": [2490, 2590, 2690]})
+def test_planejar_segura_preco_que_mudou_demais_na_propria_loja():
+    lojas, produtos = {"giassi01": "L1"}, {ARROZ: "P"}
+    plano = agendador.planejar([coletado(ARROZ, preco=5990)], lojas, produtos, {("L1", "P"): 2590})
     assert plano.gravar == []
     assert plano.revisar[0].proposta["preco_centavos"] == 5990
+    # Outra rede bem mais barata não trava nada: diferença entre redes é normal.
+    assert agendador.planejar([coletado(ARROZ, preco=5990)], lojas, produtos, {("L9", "P"): 2590}).gravar
+    # A coleta seguinte vendo o mesmo preço confirma: publica e resolve o alerta.
+    plano = agendador.planejar([coletado(ARROZ, preco=5990)], lojas, produtos, {("L1", "P"): 2590}, {"preco:L1:P": 5990})
+    assert [g.preco_centavos for g in plano.gravar] == [5990] and plano.confirmados == ["preco:L1:P"]
 
 
 class SiteFalso:
@@ -100,21 +106,25 @@ def test_coleta_grava_no_banco(banco_url, monkeypatch):
 
     with psycopg.connect(banco_url, row_factory=dict_row) as c:
         novos = c.execute(
-            "select produto_id, preco_centavos, evidencia_id from observacao_preco where preco_centavos <> 1899"
+            """select produto_id, preco_centavos, evidencia_id from observacao_preco
+               where preco_centavos <> 1899 order by preco_centavos"""
         ).fetchall()
-        # Preço igual na segunda rodada: o histórico não ganha linha nova; o preço atual só é confirmado.
-        assert [(r["produto_id"], r["preco_centavos"]) for r in novos] == [(ids["arroz"], 2590)]
+        # Arroz: preço igual na segunda rodada não ganha linha nova (o preço atual só é confirmado). Café: o salto foi
+        # confirmado pela segunda coleta.
+        assert [(r["produto_id"], r["preco_centavos"]) for r in novos] == [(ids["arroz"], 2590), (ids["cafe"], 5990)]
         atual = c.execute(
             "select preco_centavos, observado_em, desde from preco_atual where produto_id = %s", (ids["arroz"],)
         ).fetchone()
         assert atual["preco_centavos"] == 2590 and atual["observado_em"] >= atual["desde"]
         assert novos[0]["evidencia_id"] == "vtex:giassi:giassi01:10"
-        fila = c.execute("select tipo, referencia_id from fila_revisao order by tipo, referencia_id").fetchall()
-        assert [(r["tipo"], r["referencia_id"]) for r in fila] == [
-            ("anomalia", f"preco:{ids['loja']}:{ids['cafe']}"),
-            ("ean", f"giassi:{BISCOITO}"),
+        fila = c.execute("select tipo, referencia_id, status from fila_revisao order by tipo, referencia_id").fetchall()
+        # O café saltou de 18,99 para 59,90 na própria loja: alerta na primeira coleta; a segunda viu o mesmo preço,
+        # publicou e resolveu o alerta.
+        assert [(r["tipo"], r["referencia_id"], r["status"]) for r in fila] == [
+            ("anomalia", f"preco:{ids['loja']}:{ids['cafe']}", "resolvida"),
+            ("ean", f"giassi:{BISCOITO}", "aberta"),
         ]
-        execucoes = c.execute("select status, precos_gravados, eans_pedidos from execucao_coleta").fetchall()
-        assert [(e["status"], e["precos_gravados"], e["eans_pedidos"]) for e in execucoes] == [("ok", 1, 3)] * 2
+        execucoes = c.execute("select status, precos_gravados, eans_pedidos from execucao_coleta order by iniciada_em").fetchall()
+        assert [(e["status"], e["precos_gravados"], e["eans_pedidos"]) for e in execucoes] == [("ok", 1, 3), ("ok", 2, 3)]
         nomes = c.execute("select sku, nome_no_site from produto_na_rede order by sku").fetchall()
         assert [n["sku"] for n in nomes] == ["10", "20", "30"]

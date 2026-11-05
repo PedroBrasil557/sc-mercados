@@ -116,3 +116,49 @@ def verificar(conn, agora: datetime) -> list[Anomalia]:
     for a in achadas:
         abrir_revisao(conn, "anomalia", a)
     return achadas
+
+
+# ---------- trava de preço por loja ----------
+# Entre redes, diferença grande é normal (promoção de um, atacarejo de outro): comparar com as outras redes escondia
+# preço verdadeiro (1.007 preços barrados em 04/11/2026). A referência agora é o preço da própria loja: mudou mais de
+# 50% de uma coleta para outra, vai para revisão; a coleta seguinte vendo o mesmo preço confirma e publica.
+
+
+def precos_anteriores(conn, loja_ids: list, faixa: str) -> dict[tuple[str, str], int]:
+    """(loja, produto) -> preço atual de site da loja, antes da coleta de agora."""
+    return {
+        (str(r["loja_id"]), str(r["produto_id"])): r["preco_centavos"]
+        for r in conn.execute(
+            """select loja_id, produto_id, preco_centavos from preco_atual
+               where loja_id = any(%s) and faixa = %s and fonte = 'site'""",
+            (loja_ids, faixa),
+        ).fetchall()
+    }
+
+
+def precos_pendentes(conn) -> dict[str, int]:
+    """Alerta de preço aberto ("preco:loja:produto") -> preço que estava esperando confirmação."""
+    return {
+        r["referencia_id"]: int(r["preco"])
+        for r in conn.execute(
+            """select referencia_id, proposta_agente->>'preco_centavos' as preco from fila_revisao
+               where tipo = 'anomalia' and status = 'aberta' and referencia_id like 'preco:%%'
+                 and proposta_agente ? 'preco_centavos'"""
+        ).fetchall()
+        if r["preco"]
+    }
+
+
+def preco_mudou_demais(preco_centavos: int, anterior: int | None, limite: float = LIMITE_DESVIO_PRECO) -> bool:
+    return anterior is not None and abs(preco_centavos - anterior) > limite * anterior
+
+
+def confirmar_precos(conn, referencias: list[str], quem: str) -> int:
+    """Alertas de preço que a coleta seguinte confirmou (mesmo preço): resolvidos, o preço já foi publicado."""
+    if not referencias:
+        return 0
+    return conn.execute(
+        """update fila_revisao set status = 'resolvida', revisado_por = %s, decidido_em = now()
+           where tipo = 'anomalia' and status = 'aberta' and referencia_id = any(%s)""",
+        (quem, referencias),
+    ).rowcount
