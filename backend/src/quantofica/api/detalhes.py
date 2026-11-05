@@ -13,6 +13,7 @@ from psycopg import Connection
 from pydantic import BaseModel, Field
 
 from ..coleta import cupom as cupom_fiscal
+from ..regras import deslocamento as modo_de_deslocamento
 from ..regras import economia as regra_economia
 from ..regras import totais
 from ..regras.ean import normalizar
@@ -66,7 +67,13 @@ def _loja_publica(lj: dict) -> dict:
 
 
 @router.get("/produtos/{produto_id}")
-def detalhe(produto_id: UUID, membro: MembroAtual, conn: Conexao, custo_km: Annotated[int, Query(ge=0, le=1000)] = 90):
+def detalhe(
+    produto_id: UUID,
+    membro: MembroAtual,
+    conn: Conexao,
+    custo_km: Annotated[int, Query(ge=0, le=1000)] = 90,
+    deslocamento: modo_de_deslocamento.Modo | None = None,
+):
     """O produto e o preço atual em cada loja da cidade, do mais barato ao mais caro (R5, R6, R13)."""
     produto = conn.execute(
         """select p.id, p.nome_humano as nome, p.marca, p.tamanho, p.unidade, p.categoria_id as categoria,
@@ -94,7 +101,7 @@ def detalhe(produto_id: UUID, membro: MembroAtual, conn: Conexao, custo_km: Anno
                 }
             )
     precos.sort(key=lambda x: (x["preco_centavos"], x["distancia_km"]))
-    extra = _no_seu_mercado(conn, membro, produto, precos, custo_km)
+    extra = _no_seu_mercado(conn, membro, produto, precos, custo_km, deslocamento)
     # Gráfico "Preço no <loja>, últimos 30 dias": no seu mercado (ou na loja mais barata, se ele não vende).
     historico = []
     seu = extra["seu_mercado"]
@@ -155,7 +162,14 @@ def serie_diaria(mudancas: list[tuple[datetime, int]], dias: int, agora: datetim
     return serie
 
 
-def _no_seu_mercado(conn: Connection, membro: Membro, produto: dict, precos: list[dict], custo_km: int) -> dict:
+def _no_seu_mercado(
+    conn: Connection,
+    membro: Membro,
+    produto: dict,
+    precos: list[dict],
+    custo_km: int,
+    modo: modo_de_deslocamento.Modo | None = None,
+) -> dict:
     """O que a tela do produto mostra primeiro: o preço no seu mercado, se vale ir em outro, uma linha por rede
     e as marcas equivalentes mais baratas no seu mercado."""
     ctx = contexto(conn, membro)
@@ -182,7 +196,14 @@ def _no_seu_mercado(conn: Connection, membro: Membro, produto: dict, precos: lis
         barato = precos[0]
         economia = no_seu["preco_centavos"] - barato["preco_centavos"]
         km_a_mais = max(0.0, barato["distancia_km"] - no_seu["distancia_km"]) * 2
-        viagem = round(km_a_mais * custo_km)
+        if modo:
+            viagem = max(
+                0,
+                modo_de_deslocamento.ida_e_volta(modo, barato["distancia_km"])
+                - modo_de_deslocamento.ida_e_volta(modo, no_seu["distancia_km"]),
+            )
+        else:
+            viagem = round(km_a_mais * custo_km)
         veredito = {
             "rede": barato["rede"],
             "loja": barato["nome"],

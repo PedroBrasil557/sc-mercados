@@ -1,6 +1,7 @@
 """Regras R7 (total justo), R8 (melhor divisão) e R14 (distância pelo centro do bairro)."""
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from itertools import combinations
 
@@ -84,7 +85,10 @@ class Recomendacao:
 
 
 def recomendar(
-    totais: dict[str, int], distancia_km: dict[str, float], custo_km_centavos: int, base: str | None = None
+    totais: dict[str, int],
+    distancia_km: dict[str, float],
+    custo_km_centavos: int | Callable[[float], int],
+    base: str | None = None,
 ) -> Recomendacao | None:
     """A melhor loja para a casa (R8 aplicada a uma loja só): a mais perto, a menos que outra economize
     mais do que a ida e volta a mais custa, com a folga de 10 reais.
@@ -94,14 +98,20 @@ def recomendar(
     """
     if not totais:
         return None
+    # Custo de ida e volta até a loja: por km (carro, moto) ou pelo meio de transporte (regras/deslocamento.py).
+    if callable(custo_km_centavos):
+        viagem = custo_km_centavos
+    else:
+
+        def viagem(km: float) -> int:
+            return custo_deslocamento_centavos(km, custo_km_centavos)
+
     # A base é o seu mercado (onde a casa já compra); sem ele, a loja mais perto.
     perto = base if base in totais else min(totais, key=lambda loja: (distancia_km.get(loja, 0.0), totais[loja]))
     melhor, ganho_melhor = perto, 0
     for loja, total in totais.items():
         economia = totais[perto] - total
-        viagem_a_mais = custo_deslocamento_centavos(
-            max(0.0, distancia_km.get(loja, 0.0) - distancia_km.get(perto, 0.0)), custo_km_centavos
-        )
+        viagem_a_mais = max(0, viagem(distancia_km.get(loja, 0.0)) - viagem(distancia_km.get(perto, 0.0)))
         ganho = economia - viagem_a_mais
         if economia > viagem_a_mais + FOLGA_DIVISAO_CENTAVOS and ganho > ganho_melhor:
             melhor, ganho_melhor = loja, ganho

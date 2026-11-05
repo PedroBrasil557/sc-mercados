@@ -4,7 +4,8 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-nati
 
 import { api, type Comparacao, type LojaDaRede } from "@/api/cliente";
 import { diferenca, km, reais } from "@/formatar";
-import { custoKm, escolherLoja } from "@/lista/comparacao";
+import { escolherLoja, modoDeViagem } from "@/lista/comparacao";
+import { idaEVolta } from "@/lista/deslocamento";
 import { type ItemVisivel } from "@/lista/sincronia";
 import { fonte, useTema } from "@/tema";
 
@@ -79,10 +80,12 @@ export function PainelOutrasLojas({ rede, lojaAtual, aoFechar, quantidades }: Pr
     if (!atual || !alternativa) return null;
     const economia = atual.total_centavos - alternativa.total_centavos;
     const kmExtra = Math.max(0, alternativa.distancia_km - atual.distancia_km);
-    const compensa = economia > Math.round(kmExtra * 2 * custoKm()) + FOLGA_CENTAVOS; // R8: o custo que a casa escolheu
+    // R8: a viagem pelo meio de transporte da casa (só para a sugestão; a escolha é da pessoa)
+    const modo = modoDeViagem();
+    const compensa = economia > Math.max(0, idaEVolta(modo, alternativa.distancia_km) - idaEVolta(modo, atual.distancia_km)) + FOLGA_CENTAVOS;
     const nome = alternativa.bairro ?? alternativa.nome;
     return kmExtra > 0
-      ? `A ${nome} economiza ${reais(economia)}, mas fica ${km(kmExtra)} mais longe. ${compensa ? "Compensa." : "Não compensa."}`
+      ? `A ${nome} economiza ${reais(economia)}, mas fica ${km(kmExtra)} mais longe. ${compensa ? "Pela viagem, compensa." : "Pela viagem, não compensa."} A escolha é sua.`
       : `A ${nome} economiza ${reais(economia)} e não fica mais longe.`;
   })();
   const nomeEscolhida = lojas?.find((l) => l.loja_id === escolhida);

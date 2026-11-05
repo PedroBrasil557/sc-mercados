@@ -16,7 +16,7 @@ import { PainelPrecoDiferente } from "@/componentes/PainelPrecoDiferente";
 import { SeloDeFonte } from "@/componentes/SeloDeFonte";
 import { confirmar } from "@/componentes/Confirmacao";
 import { km, marca, quantidade, reais, seloDeFonte, tamanho } from "@/formatar";
-import { custoKm } from "@/lista/comparacao";
+import { custoKm, modoDeViagem } from "@/lista/comparacao";
 import { adicionarProduto, useLista } from "@/lista/sincronia";
 import { fonte, useTema } from "@/tema";
 
@@ -32,7 +32,7 @@ export default function Produto() {
   useEffect(() => {
     let valido = true;
     api
-      .produto(id, custoKm())
+      .produto(id, custoKm(), modoDeViagem())
       .then((d) => valido && setDetalhe(d))
       .catch(() => valido && setErro("Sem internet: os preços aparecem quando a conexão voltar."));
     return () => {

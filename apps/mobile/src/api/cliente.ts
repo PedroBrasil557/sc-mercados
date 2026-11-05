@@ -282,7 +282,8 @@ export const api = {
   operacoesDesde: (listaId: string, cursor: number) =>
     pedir<{ operacoes: (Operacao & { seq: number })[]; cursor: number }>("GET", `/v1/listas/${listaId}/operacoes?desde=${cursor}`),
   lista: (listaId: string) => pedir<{ itens: ItemDaLista[]; cursor: number }>("GET", `/v1/listas/${listaId}`),
-  produto: (id: string, custoKm = 90) => pedir<DetalheDoProduto>("GET", `/v1/produtos/${id}?custo_km=${custoKm}`),
+  produto: (id: string, custoKm = 90, deslocamento?: string) =>
+    pedir<DetalheDoProduto>("GET", `/v1/produtos/${id}?custo_km=${custoKm}${deslocamento ? `&deslocamento=${deslocamento}` : ""}`),
   busca: (q: string, f: FiltrosDaBusca = {}) => {
     const p = new URLSearchParams({ q });
     for (const [k, v] of Object.entries(f)) {
@@ -307,12 +308,20 @@ export const api = {
     pedir<CupomLido>("POST", "/v1/cupons", cupom),
   economia: () => pedir<{ mes: string; economia_centavos: number; cupons: number }>("GET", "/v1/economia"),
   /** Itens = produto -> quantidade, como estão no aparelho (inclui mudanças ainda não enviadas). */
-  comparar: (bairroId: string, itens: Record<string, number>, preferidas: string[] = [], custoKmCentavos = 90, qualquerMarca: string[] = []) =>
+  comparar: (
+    bairroId: string,
+    itens: Record<string, number>,
+    preferidas: string[] = [],
+    custoKmCentavos = 90,
+    qualquerMarca: string[] = [],
+    deslocamento?: string,
+  ) =>
     pedir<Comparacao>("POST", "/v1/comparar", {
       bairro_id: bairroId,
       itens,
       preferidas,
       custo_km_centavos: custoKmCentavos,
+      deslocamento,
       qualquer_marca: qualquerMarca,
     }),
   precosNaLoja: (lojaId: string, produtoIds: string[]) =>

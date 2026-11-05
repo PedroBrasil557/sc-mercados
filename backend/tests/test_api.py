@@ -192,7 +192,7 @@ def test_comparar_recomenda_a_mais_perto_quando_ir_longe_nao_compensa(api, dados
     pedido = {"bairro_id": str(dados["bairro"]), "itens": {str(dados["arroz"]): 1}}
     lojas = api.post("/v1/comparar", headers=casa["ana"], json=pedido).json()["lojas"]
     assert [(lj["nome"], lj["recomendada"]) for lj in lojas] == [("Giassi Victor Konder", True), ("Cooper Itoupava Seca", False)]
-    assert lojas[1]["nota"].startswith("R$\u00a01,00 mais barato na prateleira")
+    assert lojas[1]["nota"].startswith("R$\u00a01,00 mais barato no caixa")
     assert 0 < lojas[0]["custo_viagem_centavos"] < lojas[1]["custo_viagem_centavos"]
 
 
