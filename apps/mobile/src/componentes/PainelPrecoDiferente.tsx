@@ -47,7 +47,7 @@ export function PainelPrecoDiferente({ visivel, aoFechar, produto, loja }: Props
       rodape={<Botao rotulo="Enviar" largo ocupado={enviando} desativado={!centavos || !loja} aoTocar={() => void enviar()} />}
     >
       <View style={estilos.produto}>
-        <Miniatura categoria={produto.categoria} tamanho={produto.tamanho} nome={produto.nome} />
+        <Miniatura produtoId={produto.id} categoria={produto.categoria} tamanho={produto.tamanho} nome={produto.nome} />
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={[fonte("corpoForte"), { color: cor.textoPrincipal }]}>{[produto.nome, produto.marca].filter(Boolean).join(" · ")}</Text>
           {loja ? (

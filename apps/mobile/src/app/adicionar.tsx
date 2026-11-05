@@ -357,7 +357,7 @@ function LinhaDeResultado(p: {
       onPress={() => router.push({ pathname: "/produto/[id]", params: { id: p.produto.id } })}
       style={[estilos.resultado, { borderColor: cor.bordaPadrao }]}
     >
-      <Miniatura categoria={p.produto.categoria} tamanho={tamanho(p.produto.tamanho, p.produto.unidade)} nome={p.nome} />
+      <Miniatura produtoId={p.produto.id} categoria={p.produto.categoria} tamanho={tamanho(p.produto.tamanho, p.produto.unidade)} nome={p.nome} />
       <View style={{ flex: 1, gap: 2 }}>
         <Text numberOfLines={2} style={[fonte("corpoForte"), { color: cor.textoPrincipal }]}>
           {p.nome}

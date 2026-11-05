@@ -296,6 +296,8 @@ export const api = {
   escolherMercado: (lojaId: string | null) => pedir<Mercados>("PUT", "/v1/casa/mercado", { loja_id: lojaId }),
   inicio: () => pedir<Inicio>("GET", "/v1/inicio"),
   produtoPorEan: (codigo: string) => pedir<Produto>("GET", `/v1/produtos/ean/${encodeURIComponent(codigo)}`),
+  /** Foto do produto no site de uma rede (só para o modo de teste: ver componentes/fotoDeTeste.ts). */
+  fotos: (ids: string[]) => pedir<Record<string, string>>("GET", `/v1/fotos?ids=${ids.join(",")}`),
   outrasLojas: (rede: string, itens: Record<string, number>) =>
     pedir<{ rede: string; lojas: LojaDaRede[] }>("POST", "/v1/comparar/rede", { rede, itens }),
   ofertas: () => pedir<{ ofertas: Oferta[]; seu_mercado: Mercado | null }>("GET", "/v1/ofertas"),

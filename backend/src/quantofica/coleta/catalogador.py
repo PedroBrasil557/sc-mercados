@@ -55,6 +55,7 @@ class ItemDoSite:
     caminho: str  # "/Mercearia/Arroz/"
     granel: bool
     disponivel: bool
+    imagem: str | None = None  # foto no site da rede: só para teste no app (ver migração 0016)
 
 
 def _simples(texto: str) -> str:
@@ -172,7 +173,11 @@ def itens(produto: dict, rede: str) -> list[ItemDoSite]:
         ofertas = [s.get("commertialOffer") or {} for s in item.get("sellers") or []]
         disponivel = any(o.get("AvailableQuantity", 0) > 0 and o.get("Price", 0) > 0 for o in ofertas)
         granel = (item.get("measurementUnit") or "un").lower() == "kg" or (item.get("unitMultiplier") or 1) != 1
-        saida.append(ItemDoSite(rede, str(item.get("itemId")), gtin, _nome(produto, item), marca, caminho, granel, disponivel))
+        imagens = item.get("images") or []
+        imagem = imagens[0].get("imageUrl") if imagens else None
+        saida.append(
+            ItemDoSite(rede, str(item.get("itemId")), gtin, _nome(produto, item), marca, caminho, granel, disponivel, imagem)
+        )
     return saida
 
 
@@ -366,8 +371,8 @@ def gravar(conn: psycopg.Connection, rede: Rede, varredura: Varredura, agora: da
             conta["tamanho_diferente"] += 1
             recusados[it.sku] = (pid, it.gtin)
             continue
-        ligacoes[it.sku] = (pid, it.nome)
-    aceitos = {pid for pid, _ in ligacoes.values()}
+        ligacoes[it.sku] = (pid, it.nome, it.imagem)
+    aceitos = {pid for pid, _, _ in ligacoes.values()}
     recusados = {sku: v for sku, v in recusados.items() if v[0] not in aceitos}
 
     with conn.transaction():
@@ -379,10 +384,11 @@ def gravar(conn: psycopg.Connection, rede: Rede, varredura: Varredura, agora: da
             )
             cur.executemany("insert into ean (codigo, produto_id) values (%s, %s) on conflict (codigo) do nothing", novos_eans)
             cur.executemany(
-                """insert into produto_na_rede (produto_id, rede_id, sku, nome_no_site) values (%s, %s, %s, %s)
+                """insert into produto_na_rede (produto_id, rede_id, sku, nome_no_site, imagem_url) values (%s, %s, %s, %s, %s)
                    on conflict (rede_id, sku) do update
-                   set produto_id = excluded.produto_id, nome_no_site = excluded.nome_no_site""",
-                [(pid, rede_id, sku, nome) for sku, (pid, nome) in ligacoes.items()],
+                   set produto_id = excluded.produto_id, nome_no_site = excluded.nome_no_site,
+                       imagem_url = coalesce(excluded.imagem_url, produto_na_rede.imagem_url)""",
+                [(pid, rede_id, sku, nome, imagem) for sku, (pid, nome, imagem) in ligacoes.items()],
             )
             # Ligação e preço de antes com a embalagem errada saem (o histórico fica, imutável).
             cur.execute("delete from produto_na_rede where rede_id = %s and sku = any(%s)", (rede_id, list(recusados)))

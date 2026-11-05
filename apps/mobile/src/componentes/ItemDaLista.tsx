@@ -44,7 +44,7 @@ export function ItemDaLista({ item, meuNome, aoSomar, aoTirar, aoTocar, aoSegura
         onPress={aoTocar}
         onLongPress={aoSegurar}
       >
-        <Miniatura categoria={item.categoria} tamanho={formatarTamanho(item.tamanho, item.unidade)} nome={item.nome} />
+        <Miniatura produtoId={item.produto_id} categoria={item.categoria} tamanho={formatarTamanho(item.tamanho, item.unidade)} nome={item.nome} />
         <View style={estilos.texto}>
           <Text
             numberOfLines={2}

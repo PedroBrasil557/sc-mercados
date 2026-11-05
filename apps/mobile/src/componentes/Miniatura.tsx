@@ -1,8 +1,9 @@
 import { categorias, type Categoria } from "@quantofica/tema";
-import { StyleSheet, Text, View } from "react-native";
+import { Image, StyleSheet, Text, View } from "react-native";
 
 import { fonte, useTema } from "@/tema";
 
+import { useFotoDeTeste } from "./fotoDeTeste";
 import { IconeDeCategoria } from "./Icone";
 
 const ehCategoria = (c: string | null): c is Categoria => !!c && (categorias as readonly string[]).includes(c);
@@ -15,17 +16,36 @@ type Props = {
   marca?: string | null;
   /** P (52 dp) na lista; M (cartão de oferta); G (topo do detalhe). */
   porte?: "P" | "M" | "G";
+  /** Com o id, no modo de teste aparece a foto do produto no site de uma rede (ver fotoDeTeste.ts). */
+  produtoId?: string | null;
 };
+
+const BRANCO = "#FFFFFF"; // foto de produto é feita sobre fundo branco, também no tema escuro
 
 /**
  * Figma "Miniatura do produto" sem foto: cores e ícone da categoria, marca escrita (nunca logotipo) e tamanho.
  * O nome do produto fica fora, onde a tela já o mostra; aqui ele é só o texto lido pelo leitor de tela.
  */
-export function Miniatura({ categoria, tamanho, nome, marca, porte = "P" }: Props) {
+export function Miniatura({ categoria, tamanho, nome, marca, porte = "P", produtoId }: Props) {
   const { cor } = useTema();
+  const foto = useFotoDeTeste(produtoId);
   const cat: Categoria = ehCategoria(categoria) ? categoria : "mercearia";
   const fundo = cor[`categoria${capitalizar(cat)}Fundo`];
   const tinta = cor[`categoria${capitalizar(cat)}Tinta`];
+
+  if (foto) {
+    const estilo = porte === "P" ? estilos.p : porte === "G" ? estilos.g : estilos.m;
+    return (
+      <View accessible accessibilityRole="image" accessibilityLabel={nome} style={[estilo, estilos.comFoto, { backgroundColor: BRANCO }]}>
+        <Image source={{ uri: foto }} resizeMode="contain" style={estilos.foto} accessibilityIgnoresInvertColors />
+        {tamanho && porte !== "P" ? (
+          <View style={[estilos.selo, estilos.seloSobreFoto, { backgroundColor: cor.fundoSuperficie, borderColor: cor.bordaPadrao }]}>
+            <Text style={[fonte("numeroTamanho"), { color: cor.textoPrincipal }]}>{tamanho}</Text>
+          </View>
+        ) : null}
+      </View>
+    );
+  }
 
   if (porte === "P") {
     return (
@@ -66,4 +86,7 @@ const estilos = StyleSheet.create({
   emblemaG: { width: 140, height: 140, borderRadius: 70, alignItems: "center", justifyContent: "center" },
   marca: { flexDirection: "row", alignItems: "center", gap: 8 },
   selo: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  comFoto: { padding: 6, overflow: "hidden" },
+  foto: { width: "100%", height: "100%" },
+  seloSobreFoto: { position: "absolute", right: 10, bottom: 10, borderWidth: 1 },
 });
