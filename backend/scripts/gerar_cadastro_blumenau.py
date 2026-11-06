@@ -39,6 +39,7 @@ SITES_POR_NOME = {
     "Rede Top": "www.redetoponline.com.br",
     "Fort Atacadista": "www.fortatacadista.com.br",
     "Bistek": "www.bistek.com.br",
+    "Super A Atacadista": "encartes.superaatacadista.com.br",  # encartes em PDF (coleta/supera.py)
 }
 
 # Nome no OpenStreetMap (minúsculas) -> rede. Lojas da Cooper fora do site entram na rede Cooper, sem preço on-line.

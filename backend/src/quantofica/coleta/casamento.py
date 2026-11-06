@@ -35,7 +35,17 @@ EMBALAGEM = {
 }  # fmt: skip
 VARIOS = {"sabores", "tipos", "sortidos", "sortido", "fragrancias", "cores", "versoes"}
 # Linha especial costuma ter outro preço: "Divine 70g Sabores" não inclui o Divine Zero nem o sem glúten.
-DIFERENCIAIS = {"zero", "diet", "light", "gluten", "lactose", "integral", "organico", "vegano", "proteico", "kids"}
+DIFERENCIAIS = {
+    "zero", "diet", "light", "gluten", "lactose", "integral", "organico", "vegano", "proteico", "kids",
+    "acucar",  # "Sprite Lemon Fresh" não é a "Sprite Lemon Fresh Sem Açúcar"
+}  # fmt: skip
+# Sabor: item de um sabor só tem que dizer qual. "Suco Garibaldi Integral 1,5L" não é o de uva tinto só porque é o
+# único Garibaldi do catálogo (na dúvida, não liga). Encarte que vale para vários ("Sabores") não precisa dizer.
+SABORES = {
+    "uva", "chocolate", "laranja", "limao", "lima", "morango", "baunilha", "maca", "pessego", "abacaxi", "maracuja",
+    "manga", "goiaba", "caju", "coco", "cereja", "framboesa", "menta", "hortela", "melancia", "tangerina",
+    "acerola", "amora", "mirtilo", "frutas", "cola", "guarana",
+}  # fmt: skip
 _NUMERO = re.compile(r"^\d+([.,]\d+)?[a-z]*$")
 _POR_PACOTE = re.compile(r"c/\s*(\d+)\s*un", re.I)
 _UNIDADES_NO_NOME = re.compile(r"(\d+)\s*(?:unidades|un\b|rolos)", re.I)
@@ -82,6 +92,8 @@ def casar(nome_encarte: str, candidatos: list[Candidato]) -> list[Candidato]:
         if not no_pacote and tam.embalagem_multipla(c.nome):
             continue
         if DIFERENCIAIS & set(nome_c) != DIFERENCIAIS & texto:
+            continue
+        if not varios and SABORES & set(nome_c) != SABORES & texto:
             continue
         procuradas = _distintas(nome_encarte, marca)
         achadas = len(procuradas & set(nome_c)) / len(procuradas) if procuradas else 1.0

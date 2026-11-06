@@ -88,7 +88,7 @@ def test_coleta_liga_publica_sugere_e_trava(banco_url):
         )
         site = SiteDoFort({
             "1": produto_do_site("1", "Refrigerante Fanta Laranja Pet 600ml", "Fanta", 5.49, promo=4.99),
-            "2": produto_do_site("2", "Achocolatado em Pó Nescau 350g Leve Mais Pague Menos", "Nescau", 9.98),
+            "2": produto_do_site("2", "Achocolatado em Pó Nescau Menos Açúcar Promocional 350g", "Nescau", 9.98),
             "3": produto_do_site("3", "Refrigerante Coca-Cola Pet 2 Litros", "Coca-Cola", 19.90),  # o dobro: trava
         })  # fmt: skip
         r = fort_site.rodar(c, site, agora)
@@ -104,7 +104,7 @@ def test_coleta_liga_publica_sugere_e_trava(banco_url):
         assert c.execute(fora_do_giassi, (ids["coca"], ids["g1"])).fetchone()["n"] == 0  # travado: não publicou
 
         sugestao = c.execute("select id, proposta_agente as p from fila_revisao where referencia_id = 'fort-site:2'").fetchone()
-        assert sugestao["p"]["produtos"] == [str(ids["nescau"])]  # o casador de encarte ligaria "menos" com "Menos Açúcar"
+        assert sugestao["p"]["produtos"] == [str(ids["nescau"])]  # "Promocional" impede a ligação certa: vai para uma pessoa
         assert c.execute("select count(*) as n from produto_na_rede where sku = '2'").fetchone()["n"] == 0
 
         # A pessoa confere e aceita (aqui só para testar o caminho; neste exemplo ela deveria descartar).

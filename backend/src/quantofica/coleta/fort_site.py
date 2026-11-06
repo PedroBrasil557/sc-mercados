@@ -133,7 +133,7 @@ def rodar(conn, http, agora: datetime) -> dict:
     conn.execute(
         """update execucao_coleta set terminada_em = now(), status = 'ok', eans_pedidos = %s, precos_gravados = %s,
            enviados_revisao = %s where id = %s""",
-        (resumo["no_site"], resumo["precos"], resumo["revisao"] + resumo["sugestoes"], execucao),
+        (resumo.get("no_site", 0), resumo.get("precos", 0), resumo.get("revisao", 0) + resumo.get("sugestoes", 0), execucao),
     )
     return resumo
 
