@@ -35,4 +35,4 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           REDE: ${{ inputs.rede }}
-        run: python -m quantofica.coleta.agendador ${REDE:+--rede "$REDE"}
+        run: PYTHONUNBUFFERED=1 python -m quantofica.coleta.agendador ${REDE:+--rede "$REDE"}
