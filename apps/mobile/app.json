@@ -15,7 +15,7 @@
     "android": {
       "package": "br.com.scmercados",
       "adaptiveIcon": {
-        "backgroundColor": "#FFD43B",
+        "backgroundColor": "#0F3B2E",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -35,7 +35,7 @@
         {
           "backgroundColor": "#0F3B2E",
           "image": "./assets/splash-icon.png",
-          "imageWidth": 160
+          "imageWidth": 200
         }
       ],
       "expo-secure-store",
