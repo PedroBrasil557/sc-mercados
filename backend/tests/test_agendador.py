@@ -128,3 +128,29 @@ def test_coleta_grava_no_banco(banco_url, monkeypatch):
         assert [(e["status"], e["precos_gravados"], e["eans_pedidos"]) for e in execucoes] == [("ok", 1, 3), ("ok", 2, 3)]
         nomes = c.execute("select sku, nome_no_site from produto_na_rede order by sku").fetchall()
         assert [n["sku"] for n in nomes] == ["10", "20", "30"]
+
+
+def test_procura_no_maximo_um_lote_de_produtos_novos_por_rodada(banco_url, monkeypatch):
+    """Muitos produtos novos de uma vez não podem estourar o tempo da coleta: o resto fica para a próxima."""
+    # Usa a cidade, a rede e a loja do teste anterior quando já existem (o banco é do módulo inteiro).
+    with psycopg.connect(banco_url) as c:
+        c.execute("insert into cidade (nome, uf) values ('Blumenau', 'SC') on conflict (nome, uf) do nothing")
+        cidade = c.execute("select id from cidade where nome = 'Blumenau' and uf = 'SC'").fetchone()[0]
+        c.execute("insert into rede (nome, tem_api) values ('Giassi', true) on conflict (nome) do nothing")
+        rede = c.execute("select id from rede where nome = 'Giassi'").fetchone()[0]
+        if not c.execute("select 1 from loja where seller_id = 'giassi01'").fetchone():
+            c.execute(
+                "insert into loja (rede_id, cidade_id, nome, seller_id) values (%s, %s, 'Giassi Teste', 'giassi01')",
+                (rede, cidade),
+            )
+        c.execute("insert into categoria (id, nome, unidade_medida) values ('graos', 'Grãos', 'g') on conflict do nothing")
+        for i in range(5):
+            pid = uuid4()
+            c.execute("insert into produto (id, categoria_id, nome_humano) values (%s, 'graos', %s)", (pid, f"novo {i}"))
+            c.execute("insert into ean (codigo, produto_id) values (%s, %s)", (f"0789000000{i:04d}", pid))
+    monkeypatch.setenv("DATABASE_URL", banco_url)
+    monkeypatch.setattr(agendador, "MAX_BUSCAS_POR_RODADA", 2)
+    site = SiteFalso()
+    agendador.main(["--rede", "giassi"], http=site)
+    procurados = {u.rsplit(":", 1)[1].lstrip("0") for u in site.chamadas if "alternateIds_Ean:" in u}
+    assert len({c for c in procurados if c.startswith("789000000")}) == 2  # 5 novos, só 2 nesta rodada
