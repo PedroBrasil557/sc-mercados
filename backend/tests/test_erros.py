@@ -23,3 +23,15 @@ def test_erro_igual_agrupa_e_fatal_repetido_vira_alerta(banco_url):
         assert not colunas & {"casa_id", "membro_id", "ip", "token"}
         alertas = monitor.erros_fatais(c)
         assert len(alertas) == 1 and "5x em 24 h" in alertas[0].motivo
+
+
+def test_apk_de_teste_manda_erro_com_ambiente_teste(banco_url, monkeypatch):
+    """O APK de teste (MODO_TESTE) marca o erro como "teste": o banco e a API aceitam."""
+    import psycopg
+
+    with psycopg.connect(banco_url, autocommit=True) as c:
+        c.execute(
+            """insert into erro_app (assinatura, mensagem, onde, versao, plataforma, ambiente, fatal)
+               values ('x', 'quebrou', 'busca', '0.1.0', 'android 34', 'teste', true)"""
+        )
+        assert c.execute("select ambiente from erro_app where assinatura = 'x'").fetchone()[0] == "teste"

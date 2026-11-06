@@ -68,7 +68,7 @@ def resumo(conn: Conexao):
         "membros": conn.execute("select count(*) as n from membro").fetchone()["n"],
         "erros_24h": conn.execute(
             """select coalesce(sum(vezes), 0) as n from erro_app
-               where ultima_em > now() - interval '24 hours' and ambiente = 'publicado'"""
+               where ultima_em > now() - interval '24 hours' and ambiente in ('teste', 'publicado')"""
         ).fetchone()["n"],
     }
 
