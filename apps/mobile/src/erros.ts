@@ -6,6 +6,7 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 
 import { API } from "@/api/cliente";
+import { MODO_TESTE } from "@/modoTeste";
 
 const enviados = new Set<string>(); // o mesmo erro uma vez por sessão: um laço de erro não vira enxurrada
 
@@ -24,7 +25,7 @@ export function relatarErro(erro: unknown, onde = "global", fatal = false): void
       onde: onde.slice(0, 120),
       versao: Constants.expoConfig?.version ?? "?",
       plataforma: `${Platform.OS} ${Platform.Version}`.slice(0, 40),
-      ambiente: __DEV__ ? "desenvolvimento" : "publicado",
+      ambiente: __DEV__ ? "desenvolvimento" : MODO_TESTE ? "teste" : "publicado",
       fatal,
     }),
   }).catch(() => {
