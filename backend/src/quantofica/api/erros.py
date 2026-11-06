@@ -24,7 +24,7 @@ class ErroDoApp(BaseModel):
     onde: str = Field(default="global", max_length=120)
     versao: str = Field(default="?", max_length=40)
     plataforma: str = Field(default="?", max_length=40)
-    ambiente: Literal["desenvolvimento", "publicado"] = "publicado"
+    ambiente: Literal["desenvolvimento", "teste", "publicado"] = "publicado"
     fatal: bool = False
 
 

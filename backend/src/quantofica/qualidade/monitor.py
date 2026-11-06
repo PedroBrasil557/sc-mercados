@@ -91,7 +91,7 @@ def erros_fatais(conn) -> list[Anomalia]:
         Anomalia(f"erro:{r['assinatura'][:16]}", f"erro fatal no app ({r['vezes']}x em 24 h): {r['mensagem'][:200]}", 1)
         for r in conn.execute(
             """select assinatura, mensagem, sum(vezes) as vezes from erro_app
-               where fatal and ambiente = 'publicado' and ultima_em > now() - interval '24 hours'
+               where fatal and ambiente in ('teste', 'publicado') and ultima_em > now() - interval '24 hours'
                group by assinatura, mensagem having sum(vezes) >= %s""",
             (LIMITE_ERRO_FATAL,),
         ).fetchall()
