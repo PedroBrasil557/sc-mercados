@@ -1,9 +1,10 @@
 import { Image, StyleSheet, Text, View } from "react-native";
 
+import { MODO_TESTE } from "@/modoTeste";
 import { fonte, useTema } from "@/tema";
 
-// Logo de mercado é marca de terceiro: só aparece no teste (modo de desenvolvimento) e só com a imagem na
-// pasta local assets/logos-teste, que fica fora do git. Sem ela, ou numa versão de loja, vale o monograma.
+// Logo de mercado é marca de terceiro: só aparece no teste (Expo Go ou APK de teste, ver modoTeste.ts) e só com a
+// imagem na pasta local assets/logos-teste, que fica fora do git. Sem ela, ou numa versão de loja, vale o monograma.
 const LOGOS = require.context("../../assets/logos-teste", false, /\.png$/);
 const ARQUIVO: Record<string, string> = {
   Giassi: "giassi",
@@ -21,7 +22,7 @@ const BRANCO = "#FFFFFF"; // os logos são feitos para fundo branco, também no 
 
 function logo(rede: string): number | null {
   const arquivo = ARQUIVO[rede];
-  if (!__DEV__ || !arquivo || !LOGOS.keys().includes(`./${arquivo}.png`)) return null;
+  if (!MODO_TESTE || !arquivo || !LOGOS.keys().includes(`./${arquivo}.png`)) return null;
   return LOGOS(`./${arquivo}.png`) as number;
 }
 

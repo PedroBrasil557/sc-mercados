@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 
 import { api } from "@/api/cliente";
+import { MODO_TESTE } from "@/modoTeste";
 
 // Foto do produto tirada do site de uma rede (Giassi, Cooper, Angeloni...). É da rede ou do fabricante: só aparece no
-// modo de desenvolvimento (Expo Go), para ver como o app fica com fotos. A versão publicada mostra a miniatura até
+// modo de teste (Expo Go ou APK de teste, ver modoTeste.ts), para ver como o app fica com fotos. A versão publicada mostra a miniatura até
 // haver autorização das redes.
 const fotos = new Map<string, string | null>();
 const ouvintes = new Map<string, Set<() => void>>();
@@ -35,7 +36,7 @@ async function buscar() {
 export function useFotoDeTeste(produtoId: string | null | undefined): string | null {
   const [, renovar] = useState(0);
   useEffect(() => {
-    if (!__DEV__ || !produtoId || fotos.has(produtoId)) return;
+    if (!MODO_TESTE || !produtoId || fotos.has(produtoId)) return;
     const ouvir = () => renovar((n) => n + 1);
     const lista = ouvintes.get(produtoId) ?? new Set();
     lista.add(ouvir);
@@ -46,5 +47,5 @@ export function useFotoDeTeste(produtoId: string | null | undefined): string | n
       ouvintes.get(produtoId)?.delete(ouvir);
     };
   }, [produtoId]);
-  return __DEV__ && produtoId ? (fotos.get(produtoId) ?? null) : null;
+  return MODO_TESTE && produtoId ? (fotos.get(produtoId) ?? null) : null;
 }
