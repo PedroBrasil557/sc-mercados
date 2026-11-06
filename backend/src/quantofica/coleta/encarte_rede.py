@@ -129,7 +129,7 @@ def com_execucao(conn, rede: str, agora: datetime, coletar) -> dict:
 
 
 def main(rodar_rede) -> int:
-    """`rodar_rede(conn, http, agora)` de cada rede (supera, atacadao, carol), com a rodada do Leitor de encartes."""
+    """`rodar_rede(conn, http, agora)` de cada rede (por ora, supera), com a rodada do Leitor de encartes."""
     with psycopg.connect(os.environ["DATABASE_URL"], autocommit=True, row_factory=dict_row) as conn:
         with rodada(conn, "leitor_encartes") as resumo:
             r = rodar_rede(conn, ClienteHttp(), datetime.now(UTC))
