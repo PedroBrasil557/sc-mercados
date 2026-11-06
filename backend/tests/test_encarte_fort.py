@@ -101,6 +101,14 @@ class TestCasamento:
         ]
         assert {c.chave for c in casamento.casar("Chocolate Lacta 145g Sabores", lacta)} == {"branco", "leite"}
 
+    def test_sem_acucar_e_sabor_so_quando_o_encarte_diz(self):
+        sprite = [cand("sem", "Refrigerante Sprite Lemon Fresh Sem Açúcar Garrafa 510ml", "Sprite", 510, "ml")]
+        assert casamento.casar("Refrigerante Sprite Lemon Fresh 510ml", sprite) == []
+        assert [c.chave for c in casamento.casar("Refrigerante Sprite Lemon Fresh Sem Açúcar 510ml", sprite)] == ["sem"]
+        suco = [cand("uva", "Suco Integral Uva Tinto Garibaldi Garrafa 1,5l", "Garibaldi", 1500, "ml")]
+        assert casamento.casar("Suco Garibaldi Integral 1,5L", suco) == []  # o encarte não diz o sabor
+        assert [c.chave for c in casamento.casar("Suco Garibaldi Integral Uva 1,5L", suco)] == ["uva"]
+
     def test_linha_especial_so_quando_o_encarte_diz(self):
         divine = [
             cand("cremoso", "Chocolate em Barra Mais Cremoso ao Leite Divine Pacote 70g", "Divine", 70),
