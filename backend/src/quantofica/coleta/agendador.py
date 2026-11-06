@@ -30,6 +30,12 @@ from . import redes as config
 from .gravar import Preco
 from .vtex import ClienteHttp, Http, PrecoColetado, Rede, coletar
 
+# Produto que a rede ainda não tem ligado é procurado um a um (1 por segundo, até 4 pedidos cada). Quando entram
+# muitos produtos de uma vez no catálogo (ex.: 1.333 do Bistek em 05/11/2026), a coleta passava das 3 horas do
+# GitHub e era cancelada sem gravar. Cada rodada procura no máximo estes; o resto fica para as próximas e para o
+# Catalogador de domingo, que marca o que a rede não vende.
+MAX_BUSCAS_POR_RODADA = 200
+
 
 @dataclass(frozen=True)
 class Gravacao:
@@ -150,7 +156,11 @@ def _rodar_rede(conn: psycopg.Connection, http: Http, rede: Rede, agora: datetim
             ).fetchall()
         }
         nao_encontrados: list[str] = []
-        coletados = coletar(http, rede, [e for e in produto_por_ean if e not in ausentes], conhecidos, nao_encontrados)
+        pedir = [e for e in produto_por_ean if e not in ausentes]
+        adiados = set([e for e in pedir if e not in conhecidos][MAX_BUSCAS_POR_RODADA:])
+        if adiados:
+            print(f"{rede.id}: {len(adiados)} produtos novos ficam para as próximas coletas", flush=True)
+        coletados = coletar(http, rede, [e for e in pedir if e not in adiados], conhecidos, nao_encontrados)
         plano = planejar(coletados, loja_por_seller, produto_por_ean, anteriores, pendentes)
 
         with conn.transaction():
