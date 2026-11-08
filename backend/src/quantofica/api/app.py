@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
-from . import detalhes, erros, identidade, listas, mercado, painel, precos, produtos, web
+from . import catalogo, detalhes, erros, identidade, listas, mercado, painel, precos, produtos, web
 from .banco import Conexao
 
 
@@ -42,6 +42,7 @@ def create_app(dsn: str | None = None, aquecer_ao_ligar: bool | None = None) -> 
         )
         app.state.pool = pool
         if aquecer_ao_ligar:
+            catalogo.configurar(pool)  # cache vencido responde na hora e é refeito em segundo plano
             threading.Thread(target=_aquecer, args=(pool,), daemon=True).start()
         try:
             yield
