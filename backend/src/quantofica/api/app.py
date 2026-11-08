@@ -6,6 +6,7 @@ Opcional: PAINEL_TOKEN_SHA256 (liga o painel interno em /painel)
 """
 
 import os
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -16,7 +17,19 @@ from . import detalhes, erros, identidade, listas, mercado, painel, precos, prod
 from .banco import Conexao
 
 
-def create_app(dsn: str | None = None) -> FastAPI:
+def _aquecer(pool: ConnectionPool) -> None:
+    """Catálogo e palavras de busca prontos logo que o servidor liga, em segundo plano."""
+    try:
+        with pool.connection() as conn:
+            mercado.aquecer(conn)
+    except Exception as erro:  # aquecer é só ganho de tempo: se falhar, a primeira busca faz a conta
+        print(f"aquecer: {erro!r}", flush=True)
+
+
+def create_app(dsn: str | None = None, aquecer_ao_ligar: bool | None = None) -> FastAPI:
+    # Só no servidor de verdade (sem dsn, vindo do ambiente): nos testes o catálogo muda depois de a API ligar.
+    aquecer_ao_ligar = dsn is None if aquecer_ao_ligar is None else aquecer_ao_ligar
+
     @asynccontextmanager
     async def ciclo(app: FastAPI):
         # prepare_threshold=None: o pooler do Supabase (modo transação) não aceita prepared statements.
@@ -28,6 +41,8 @@ def create_app(dsn: str | None = None) -> FastAPI:
             open=True,
         )
         app.state.pool = pool
+        if aquecer_ao_ligar:
+            threading.Thread(target=_aquecer, args=(pool,), daemon=True).start()
         try:
             yield
         finally:

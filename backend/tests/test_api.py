@@ -6,6 +6,7 @@ from uuid import uuid4
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
+from psycopg.rows import dict_row
 
 from quantofica.api.app import create_app
 
@@ -273,6 +274,26 @@ def test_oferta_provisoria_pelo_de_por_conferido_com_as_outras_lojas(api, banco_
         )
     ofertas = api.get("/v1/ofertas", headers=casa["ana"]).json()["ofertas"]
     assert [(o["produto"]["nome"], o["rede"], o["desconto_pct"]) for o in ofertas] == [("Café tradicional", "Giassi", 28)]
+
+    # Calculadas depois da coleta (coleta/ofertas.py), a tela lê o resultado guardado: o mesmo de calcular na hora.
+    from quantofica.api.detalhes import gravar_ofertas
+
+    # A conta guardada compara com o preço típico (mediana das lojas) de cada rede na cidade: a Cooper sai por
+    # 15,49 no meio das duas lojas, então o café precisa estar abaixo disso para ser oferta.
+    with psycopg.connect(banco_url, row_factory=dict_row) as c:
+        c.execute(
+            "insert into observacao_preco (produto_id, loja_id, preco_centavos, preco_de_centavos, fonte, observado_em) "
+            "values (%s, %s, 1290, 2490, 'site', %s)",
+            (dados["cafe"], dados["loja_giassi"], AGORA - timedelta(minutes=20)),
+        )
+        assert gravar_ofertas(c, datetime.now(UTC)) >= 1
+        c.execute("update oferta_calculada set base = 'guardada'")  # marca para provar que veio da tabela
+    guardadas = api.get("/v1/ofertas", headers=casa["ana"]).json()["ofertas"]
+    assert [(o["produto"]["nome"], o["rede"], o["desconto_pct"], o["base"]) for o in guardadas] == [
+        ("Café tradicional", "Giassi", 48, "guardada")
+    ]
+    with psycopg.connect(banco_url) as c:  # os outros testes do módulo voltam a calcular na hora
+        c.execute("delete from oferta_calculada_rodada")
 
 
 def test_reporte_de_preco_vai_para_a_revisao(api, banco_url, dados, casa):
