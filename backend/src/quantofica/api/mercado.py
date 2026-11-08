@@ -104,14 +104,37 @@ def _casa_termo(termo: str, palavras: list[str]) -> list[int]:
     return [i for i, w in enumerate(palavras) if w.startswith(termo)]
 
 
+# Palavras de cada produto do catálogo, guardadas: a busca percorre o catálogo inteiro (23 mil produtos) e refazer
+# acento e separação de palavras a cada busca custava mais de 1 s no servidor.
+_PALAVRAS: dict[tuple[str, str, str | None], tuple[list[str], list[str], list[str]]] = {}
+
+
+def palavras_do_produto(produto: dict) -> tuple[list[str], list[str], list[str]]:
+    chave = (produto["id"], produto["nome"], produto["marca"])
+    guardado = _PALAVRAS.get(chave)
+    if guardado is None:
+        guardado = _PALAVRAS[chave] = (
+            _palavras(produto["nome"]),
+            _palavras(produto["marca"] or ""),
+            _palavras(produto["nome_curto"]),
+        )
+    return guardado
+
+
+def aquecer(conn) -> int:
+    """Prepara o catálogo e as palavras de busca (o primeiro usuário depois de o servidor ligar não espera)."""
+    cat = catalogo(conn)
+    for p in cat["produtos"].values():
+        palavras_do_produto(p)
+    return len(cat["produtos"])
+
+
 def avaliar(produto: dict, termos: list[str]) -> tuple[int, bool] | None:
     """(pontos, só_negado) se o produto bate com todos os termos; None se não bate.
 
     "Só negado": o termo aparece só depois de "zero"/"sem" ("Refrigerante Zero Açúcar" numa busca por açúcar).
     """
-    nome = _palavras(produto["nome"])
-    marca = _palavras(produto["marca"] or "")
-    curto = _palavras(produto["nome_curto"])
+    nome, marca, curto = palavras_do_produto(produto)
     pontos, negado = 0, True
     for t in termos:
         pos = _casa_termo(t, nome)

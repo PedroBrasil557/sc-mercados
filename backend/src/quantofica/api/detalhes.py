@@ -293,13 +293,17 @@ def outras_lojas(pedido: PedidoRede, membro: MembroAtual, conn: Conexao):
 # ---------- 07 Ofertas reais (R9) ----------
 
 
-@router.get("/ofertas")
-def ofertas(membro: MembroAtual, conn: Conexao, limite: Annotated[int, Query(ge=1, le=200)] = 80):
-    """Ofertas reais na loja mais perto de cada rede. Com menos de 30 dias de histórico vale a regra provisória do R9."""
-    ctx = contexto(conn, membro)
-    seu = ctx.seu_mercado
-    escolhidas = {str(lj["id"]): lj for lj in ctx.por_rede.values()}
-    agora = datetime.now(UTC)
+# Ofertas calculadas depois de cada coleta (coleta/ofertas.py): a tela só lê o resultado. Conta mais velha que isto
+# (coleta parada) volta a ser feita na hora.
+OFERTAS_VALEM = timedelta(hours=30)
+
+
+def calcular_ofertas(conn: Connection, rede_da_loja: dict[str, str], agora: datetime) -> list[dict]:
+    """Ofertas reais nestas lojas (R9): uma por loja e produto, comparando com o menor preço de cada outra rede.
+    Com menos de 30 dias de histórico vale a regra provisória do R9."""
+    lojas = list(rede_da_loja)
+    if not lojas:
+        return []
     # Candidatas: preço "de/por" no site, preço de encarte ou preço que mudou no último mês (o primeiro preço visto
     # não conta como mudança). O resto não pode ser oferta real, e assim a conta não percorre o catálogo inteiro.
     candidatos = [
@@ -309,24 +313,23 @@ def ofertas(membro: MembroAtual, conn: Conexao, limite: Annotated[int, Query(ge=
                where loja_id = any(%s) and faixa = %s and observado_em >= %s
                  and (preco_de_centavos > preco_centavos or fonte = 'encarte'
                       or (desde >= %s and anterior_centavos is not null))""",
-            (list(escolhidas), Faixa.VAREJO, agora - timedelta(days=3), agora - timedelta(days=30)),
+            (lojas, Faixa.VAREJO, agora - timedelta(days=3), agora - timedelta(days=30)),
         ).fetchall()
     ]
-    produtos = {
-        str(r["id"]): r
-        for r in conn.execute(
-            """select p.id, p.nome_humano as nome, p.marca, p.tamanho, p.unidade, p.categoria_id as categoria,
-                  coalesce((p.atributos->>'por_kg')::boolean, false) as por_kg
-                from produto p where p.id = any(%s)""",
-            (candidatos,),
-        ).fetchall()
-    }
-    atuais = precos_atuais(conn, list(escolhidas), list(produtos), agora)
-    mudancas = _mudancas(conn, list(escolhidas), list(produtos), agora - timedelta(days=60))
+    atuais = precos_atuais(conn, lojas, candidatos, agora)
+    mudancas = _mudancas(conn, lojas, candidatos, agora - timedelta(days=60))
     historico: dict[tuple[str, str], list[tuple[datetime, int]]] = {
         chave: [(datetime.combine(d, datetime.min.time(), UTC), v) for d, v in serie_diaria(m, 60, agora)]
         for chave, m in mudancas.items()
     }
+    # Preço típico (mediana das lojas) de cada rede por produto: as outras lojas da mesma rede não contam como
+    # "outro mercado". Com uma loja por rede (a conta na hora, para a casa), é o preço daquela loja.
+    precos_da_rede: dict[str, dict[str, list[int]]] = {}
+    for loja_id, por_produto in atuais.items():
+        rede = rede_da_loja[loja_id]
+        for produto_id, exibido in por_produto.items():
+            precos_da_rede.setdefault(produto_id, {}).setdefault(rede, []).append(exibido.observacao.preco_centavos)
+    por_rede = {p: {r: int(median(v)) for r, v in redes.items()} for p, redes in precos_da_rede.items()}
 
     achadas = []
     for loja_id, por_produto in atuais.items():
@@ -335,9 +338,9 @@ def ofertas(membro: MembroAtual, conn: Conexao, limite: Annotated[int, Query(ge=
             serie = historico.get((loja_id, produto_id), [])
             dias = (agora - min(t for t, _ in serie)).days if serie else 0
             h30 = [v for t, v in serie if t >= agora - timedelta(days=30)]
-            outras = [p[produto_id].observacao.preco_centavos for lid, p in atuais.items() if lid != loja_id and produto_id in p]
+            outras = [v for r, v in por_rede[produto_id].items() if r != rede_da_loja[loja_id]]
             if o.fonte == "encarte":
-                # Encarte (Fort): é oferta quando sai mais barato que em todos os outros mercados perto.
+                # Encarte: é oferta quando sai mais barato que em todos os outros mercados.
                 if not outras or o.preco_centavos >= min(outras):
                     continue
                 referencia, base = min(outras), "encarte, comparado com os outros mercados"
@@ -346,25 +349,106 @@ def ofertas(membro: MembroAtual, conn: Conexao, limite: Annotated[int, Query(ge=
                 base = "mediana de 30 dias" if dias >= 30 else "preço anterior da loja, conferido com as outras"
             else:
                 continue
-            produto = produtos[produto_id]
             achadas.append(
-                {"produto": produto | {"nome_curto": nome_curto(produto["nome"], produto["marca"])}}
-                | _loja_publica(escolhidas[loja_id])
-                | {
+                {
+                    "loja_id": loja_id,
+                    "produto_id": produto_id,
                     "preco_centavos": o.preco_centavos,
                     "referencia_centavos": referencia,
                     "desconto_pct": percentual_desconto(o.preco_centavos, referencia),
                     "base": base,
                     "fonte": o.fonte,
                     "valido_ate": o.valido_ate,
-                    "seu_mercado": seu is not None and loja_id == str(seu["id"]),
-                    "preco_por_unidade": preco_por_unidade(o.preco_centavos, produto["tamanho"], produto["unidade"]),
                     "observado_em": o.observado_em,
                 }
             )
+    return achadas
+
+
+def gravar_ofertas(conn: Connection, agora: datetime) -> int:
+    """Calcula as ofertas de todas as lojas e troca as guardadas (rodado depois de cada coleta)."""
+    rede_da_loja = {
+        str(r["id"]): r["rede"]
+        for r in conn.execute("select l.id, r.nome as rede from loja l join rede r on r.id = l.rede_id").fetchall()
+    }
+    achadas = calcular_ofertas(conn, rede_da_loja, agora)
+    with conn.transaction():
+        conn.execute("delete from oferta_calculada")
+        with conn.cursor() as cur:
+            cur.executemany(
+                """insert into oferta_calculada (loja_id, produto_id, preco_centavos, referencia_centavos, desconto_pct, base,
+                     fonte, valido_ate, observado_em, calculado_em)
+                   values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                [
+                    (
+                        a["loja_id"], a["produto_id"], a["preco_centavos"], a["referencia_centavos"], a["desconto_pct"],
+                        a["base"], a["fonte"], a["valido_ate"], a["observado_em"], agora,
+                    )
+                    for a in achadas
+                ],
+            )  # fmt: skip
+        conn.execute("insert into oferta_calculada_rodada (calculada_em, ofertas) values (%s, %s)", (agora, len(achadas)))
+    return len(achadas)
+
+
+def _ofertas_guardadas(conn: Connection, lojas: list[str], agora: datetime) -> list[dict] | None:
+    """As ofertas calculadas na última coleta, se a conta for recente; None manda calcular na hora."""
+    ultima = conn.execute("select max(calculada_em) as em from oferta_calculada_rodada").fetchone()
+    if not ultima or not ultima["em"] or ultima["em"] < agora - OFERTAS_VALEM:
+        return None
+    return [
+        {**r, "loja_id": str(r["loja_id"]), "produto_id": str(r["produto_id"])}
+        for r in conn.execute(
+            """select loja_id, produto_id, preco_centavos, referencia_centavos, desconto_pct, base, fonte, valido_ate,
+                      observado_em
+               from oferta_calculada where loja_id = any(%s) and (valido_ate is null or valido_ate > %s)""",
+            (lojas, agora),
+        ).fetchall()
+    ]
+
+
+@router.get("/ofertas")
+def ofertas(membro: MembroAtual, conn: Conexao, limite: Annotated[int, Query(ge=1, le=200)] = 80):
+    """Ofertas reais na loja mais perto de cada rede (calculadas depois de cada coleta)."""
+    ctx = contexto(conn, membro)
+    seu = ctx.seu_mercado
+    escolhidas = {str(lj["id"]): lj for lj in ctx.por_rede.values()}
+    agora = datetime.now(UTC)
+    achadas = _ofertas_guardadas(conn, list(escolhidas), agora)
+    if achadas is None:
+        achadas = calcular_ofertas(conn, {lid: lj["rede"] for lid, lj in escolhidas.items()}, agora)
+    produtos = {
+        str(r["id"]): r
+        for r in conn.execute(
+            """select p.id, p.nome_humano as nome, p.marca, p.tamanho, p.unidade, p.categoria_id as categoria,
+                  coalesce((p.atributos->>'por_kg')::boolean, false) as por_kg
+                from produto p where p.id = any(%s)""",
+            (list({a["produto_id"] for a in achadas}),),
+        ).fetchall()
+    }
+    saida = []
+    for a in achadas:
+        produto = produtos.get(a["produto_id"])
+        if produto is None:
+            continue
+        saida.append(
+            {"produto": produto | {"nome_curto": nome_curto(produto["nome"], produto["marca"])}}
+            | _loja_publica(escolhidas[a["loja_id"]])
+            | {
+                "preco_centavos": a["preco_centavos"],
+                "referencia_centavos": a["referencia_centavos"],
+                "desconto_pct": a["desconto_pct"],
+                "base": a["base"],
+                "fonte": a["fonte"],
+                "valido_ate": a["valido_ate"],
+                "seu_mercado": seu is not None and a["loja_id"] == str(seu["id"]),
+                "preco_por_unidade": preco_por_unidade(a["preco_centavos"], produto["tamanho"], produto["unidade"]),
+                "observado_em": a["observado_em"],
+            }
+        )
     # Do seu mercado para o mais longe; dentro de cada loja, o maior desconto primeiro.
-    achadas.sort(key=lambda a: (not a["seu_mercado"], a["distancia_km"], -a["desconto_pct"]))
-    return {"ofertas": achadas[:limite], "seu_mercado": loja_publica(seu)}
+    saida.sort(key=lambda a: (not a["seu_mercado"], a["distancia_km"], -a["desconto_pct"]))
+    return {"ofertas": saida[:limite], "seu_mercado": loja_publica(seu)}
 
 
 # ---------- 19 Preço diferente ----------

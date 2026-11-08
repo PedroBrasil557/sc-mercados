@@ -22,6 +22,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from ..agentes import rodada
+from ..api.detalhes import gravar_ofertas
 from ..qualidade import monitor
 from ..qualidade.monitor import Anomalia
 from ..regras.preco import Faixa
@@ -238,6 +239,11 @@ def main(argv: list[str] | None = None, http: Http | None = None) -> int:
             resumo["apontados"] = len(achadas)
             for a in achadas:
                 print(f"anomalia: {a.referencia}: {a.motivo}", file=sys.stderr)
+        try:  # ofertas prontas para a tela (a conta levava 12 a 26 s a cada abertura do app)
+            print(f"ofertas calculadas: {gravar_ofertas(conn, datetime.now(UTC))}")
+        except Exception as erro:
+            falhas += 1
+            print(f"ofertas: falhou: {erro!r}", file=sys.stderr)
     return 1 if falhas else 0
 
 

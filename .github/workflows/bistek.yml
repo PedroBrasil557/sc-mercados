@@ -43,3 +43,8 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           MODO: ${{ inputs.modo || (github.event.schedule == '0 2 * * 0' && 'catalogo') || 'ofertas' }}
         run: python -m quantofica.coleta.bistek "--$MODO"
+      - name: Ofertas (calcula pronto para a tela)
+        if: always()
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m quantofica.coleta.ofertas
