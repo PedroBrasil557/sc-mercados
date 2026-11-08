@@ -391,18 +391,22 @@ def gravar_ofertas(conn: Connection, agora: datetime) -> int:
     return len(achadas)
 
 
-def _ofertas_guardadas(conn: Connection, lojas: list[str], agora: datetime) -> list[dict] | None:
+def _ofertas_guardadas(conn: Connection, lojas: list[str], agora: datetime, por_loja: int) -> list[dict] | None:
     """As ofertas calculadas na última coleta, se a conta for recente; None manda calcular na hora."""
     ultima = conn.execute("select max(calculada_em) as em from oferta_calculada_rodada").fetchone()
     if not ultima or not ultima["em"] or ultima["em"] < agora - OFERTAS_VALEM:
         return None
     return [
         {**r, "loja_id": str(r["loja_id"]), "produto_id": str(r["produto_id"])}
+        # Só as maiores de cada loja: a tela mostra no máximo o limite pedido e cada loja tem milhares guardadas.
         for r in conn.execute(
             """select loja_id, produto_id, preco_centavos, referencia_centavos, desconto_pct, base, fonte, valido_ate,
                       observado_em
-               from oferta_calculada where loja_id = any(%s) and (valido_ate is null or valido_ate > %s)""",
-            (lojas, agora),
+               from (select o.*, row_number() over (partition by loja_id order by desconto_pct desc, produto_id) as n
+                     from oferta_calculada o
+                     where loja_id = any(%s) and (valido_ate is null or valido_ate > %s)) x
+               where n <= %s""",
+            (lojas, agora, por_loja),
         ).fetchall()
     ]
 
@@ -414,7 +418,7 @@ def ofertas(membro: MembroAtual, conn: Conexao, limite: Annotated[int, Query(ge=
     seu = ctx.seu_mercado
     escolhidas = {str(lj["id"]): lj for lj in ctx.por_rede.values()}
     agora = datetime.now(UTC)
-    achadas = _ofertas_guardadas(conn, list(escolhidas), agora)
+    achadas = _ofertas_guardadas(conn, list(escolhidas), agora, limite)
     if achadas is None:
         achadas = calcular_ofertas(conn, {lid: lj["rede"] for lid, lj in escolhidas.items()}, agora)
     produtos = {
