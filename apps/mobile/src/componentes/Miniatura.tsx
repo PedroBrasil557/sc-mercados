@@ -1,5 +1,6 @@
 import { categorias, type Categoria } from "@quantofica/tema";
-import { Image, StyleSheet, Text, View } from "react-native";
+import { Image } from "expo-image";
+import { StyleSheet, Text, View } from "react-native";
 
 import { fonte, useTema } from "@/tema";
 
@@ -37,7 +38,16 @@ export function Miniatura({ categoria, tamanho, nome, marca, porte = "P", produt
     const estilo = porte === "P" ? estilos.p : porte === "G" ? estilos.g : estilos.m;
     return (
       <View accessible accessibilityRole="image" accessibilityLabel={nome} style={[estilo, estilos.comFoto, { backgroundColor: BRANCO }]}>
-        <Image source={{ uri: foto }} resizeMode="contain" style={estilos.foto} accessibilityIgnoresInvertColors />
+        {/* expo-image guarda a foto no celular (memória e disco): na segunda vez abre na hora, sem baixar de novo. */}
+        <Image
+          source={{ uri: foto }}
+          contentFit="contain"
+          cachePolicy="memory-disk"
+          recyclingKey={produtoId ?? undefined}
+          transition={120}
+          style={estilos.foto}
+          accessibilityIgnoresInvertColors
+        />
         {tamanho && porte !== "P" ? (
           <View style={[estilos.selo, estilos.seloSobreFoto, { backgroundColor: cor.fundoSuperficie, borderColor: cor.bordaPadrao }]}>
             <Text style={[fonte("numeroTamanho"), { color: cor.textoPrincipal }]}>{tamanho}</Text>
